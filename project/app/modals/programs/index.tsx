@@ -1,8 +1,17 @@
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  TextInput,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Search, ArrowLeft, X, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useProgramsStore } from '@/lib/store/programsStore';
 
 type Program = {
   id: string;
@@ -20,19 +29,36 @@ export default function ProgramsScreen() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { needsRefresh, setNeedsRefresh } = useProgramsStore();
 
   const muscleGroups = [
-    'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
+    'chest',
+    'back',
+    'shoulders',
+    'legs',
+    'core',
+    'biceps',
+    'triceps',
   ];
 
   useEffect(() => {
     fetchPrograms();
-  }, []);
+  }, [searchQuery, selectedMuscles]);
+
+  // Refresh data when needsRefresh is true
+  useEffect(() => {
+    if (needsRefresh) {
+      fetchPrograms();
+      setNeedsRefresh(false);
+    }
+  }, [needsRefresh]);
 
   const fetchPrograms = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
       let query = supabase
@@ -48,7 +74,29 @@ export default function ProgramsScreen() {
       const { data, error: programsError } = await query;
 
       if (programsError) throw programsError;
-      setPrograms(data || []);
+
+      // Get workout counts for each program
+      const enrichedPrograms = await Promise.all(
+        (data || []).map(async (program) => {
+          // Get the actual count of workouts in the program
+          const { count: workoutCount, error: countError } = await supabase
+            .from('program_workouts')
+            .select('*', { count: 'exact', head: true })
+            .eq('program_id', program.id);
+
+          if (countError) {
+            console.error('Error fetching workout count:', countError);
+            return program;
+          }
+
+          return {
+            ...program,
+            weekly_workouts: workoutCount || 0,
+          };
+        })
+      );
+
+      setPrograms(enrichedPrograms);
     } catch (err: any) {
       console.error('Error fetching programs:', err);
       setError(err.message);
@@ -61,7 +109,7 @@ export default function ProgramsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Pressable 
+          <Pressable
             onPress={() => router.push('/(tabs)/action')}
             style={styles.backButton}
             hitSlop={8}
@@ -77,7 +125,10 @@ export default function ProgramsScreen() {
         <View style={styles.searchContainer}>
           <Search size={20} color="#5eead4" />
           <TextInput
-            style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
+            style={[
+              styles.searchInput,
+              Platform.OS === 'web' && styles.searchInputWeb,
+            ]}
             placeholder="Search programs..."
             placeholderTextColor="#5eead4"
             value={searchQuery}
@@ -86,7 +137,7 @@ export default function ProgramsScreen() {
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.programsList}
         contentContainerStyle={styles.programsListContent}
       >
@@ -103,8 +154,8 @@ export default function ProgramsScreen() {
           </View>
         ) : (
           programs.map((program) => (
-            <Pressable 
-              key={program.id} 
+            <Pressable
+              key={program.id}
               style={styles.programCard}
               onPress={() => router.push(`/modals/programs/${program.id}`)}
             >
@@ -114,14 +165,22 @@ export default function ProgramsScreen() {
                   <Text style={styles.workoutCount}>
                     {program.weekly_workouts} workouts/week
                   </Text>
-                  <View style={[
-                    styles.statusBadge,
-                    program.is_active ? styles.activeBadge : styles.inactiveBadge
-                  ]}>
-                    <Text style={[
-                      styles.statusText,
-                      program.is_active ? styles.activeText : styles.inactiveText
-                    ]}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      program.is_active
+                        ? styles.activeBadge
+                        : styles.inactiveBadge,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusText,
+                        program.is_active
+                          ? styles.activeText
+                          : styles.inactiveText,
+                      ]}
+                    >
                       {program.is_active ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
@@ -134,7 +193,7 @@ export default function ProgramsScreen() {
       </ScrollView>
 
       <View style={styles.bottomButtonContainer}>
-        <Pressable 
+        <Pressable
           style={styles.newProgramButton}
           onPress={() => router.push('/modals/programs/new')}
         >
@@ -218,7 +277,6 @@ const styles = StyleSheet.create({
   },
   programInfo: {
     flex: 1,
-    marginRight: 16,
   },
   programName: {
     fontSize: 18,
@@ -240,7 +298,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    height: 24,  // Fixed height to contain text properly
+    height: 24, // Fixed height to contain text properly
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 60, // Ensure minimum width for the badge
