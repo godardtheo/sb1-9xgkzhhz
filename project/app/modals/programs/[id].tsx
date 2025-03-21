@@ -1,15 +1,17 @@
-import { View, Text, StyleSheet, TextInput, Pressable, Platform, Switch, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, Switch } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Info, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Info, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useEffect, useRef } from 'react';
-import ProgramContent from '@/components/ProgramContent';
-import { supabase, handleApiError } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import DraggableWorkoutCard from '@/components/DraggableWorkoutCard';
+import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
-
-// Track rendering for debugging
-let renderCount = 0;
+import WorkoutDetailsModal from '@/components/WorkoutDetailsModal';
+import DeleteProgramModal from '@/components/DeleteProgramModal';
+import { useProgramsStore } from '@/lib/store/programsStore';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 type Workout = {
   id: string;             // This is the program_workout id
@@ -33,28 +35,35 @@ export default function EditProgramScreen() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showWorkoutSelection, setShowWorkoutSelection] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-  const [initialDataFetched, setInitialDataFetched] = useState(false);
-  
-  // Reference to prevent multiple concurrent fetches
-  const fetchingRef = useRef(false);
+  const [showWorkoutDetails, setShowWorkoutDetails] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const { setNeedsRefresh } = useProgramsStore();
 
-  // Log renders for debugging
-  renderCount++;
-  console.log(`EditProgramScreen render #${renderCount}, workouts: ${workouts.length}`);
+  const {
+    workouts: reorderedWorkouts,
+    setWorkouts: setReorderedWorkouts,
+    activeIndex,
+    itemOffsets,
+    itemTranslations,
+    updateItemHeight,
+    handleDragActive,
+    handleDragEnd,
+  } = useWorkoutReorder(workouts);
 
-  // Set mounted flag
+  // Keep workouts and reorderedWorkouts in sync
   useEffect(() => {
-    setIsMounted(true);
-    return () => setIsMounted(false);
-  }, []);
+    if (workouts && workouts.length > 0) {
+      setReorderedWorkouts(workouts);
+    }
+  }, [workouts]);
 
-  // Only fetch details on initial mount or when id changes
   useEffect(() => {
-    if (isMounted && id && !initialDataFetched && !fetchingRef.current) {
+    if (id) {
       fetchProgramDetails();
     }
-  }, [id, isMounted, initialDataFetched]);
+  }, [id]);
 
   const totalWorkouts = workouts.length;
   const totalSets = workouts.reduce((acc, workout) => acc + (workout.set_count || 0), 0);
@@ -64,23 +73,9 @@ export default function EditProgramScreen() {
   }, 0);
 
   const fetchProgramDetails = async () => {
-    // Guard against concurrent or repeated fetches
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-    
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching program details for ID:', id);
-
-      // Add a small delay to prevent excessive API calls
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Check if component is still mounted
-      if (!isMounted) {
-        fetchingRef.current = false;
-        return;
-      }
 
       // Fetch program basic info
       const { data: program, error: programError } = await supabase
@@ -90,10 +85,6 @@ export default function EditProgramScreen() {
         .single();
 
       if (programError) throw programError;
-
-      if (!program) {
-        throw new Error('Program not found');
-      }
 
       setName(program.name);
       setDescription(program.description || '');
@@ -117,135 +108,80 @@ export default function EditProgramScreen() {
       if (programWorkoutsError) throw programWorkoutsError;
 
       if (!programWorkoutsData || programWorkoutsData.length === 0) {
-        console.log('No workouts found for program');
         setWorkouts([]);
-        setInitialDataFetched(true);
+        setLoading(false);
         return;
       }
 
-      console.log(`Found ${programWorkoutsData.length} workouts for program`);
+      // Process each workout to get exercise and set counts
+      const processedWorkouts = await Promise.all(programWorkoutsData.map(async (workout) => {
+        if (!workout.template_id) {
+          // Handle workouts without a template
+          return {
+            id: workout.id,
+            name: workout.name,
+            description: workout.description,
+            muscles: workout.muscles || [],
+            estimated_duration: workout.estimated_duration || '0 min',
+            exercise_count: 0,
+            set_count: 0,
+            template_id: null
+          };
+        }
 
-      // Process each workout to get simplified data without expensive database calls
-      const processedWorkouts = programWorkoutsData.map((workout) => {
+        // Get exercise count using template_id
+        const { count: exerciseCount, error: exerciseError } = await supabase
+          .from('template_exercises')
+          .select('*', { count: 'exact', head: true })
+          .eq('template_id', workout.template_id);
+
+        if (exerciseError) {
+          console.error('Error fetching exercise count:', exerciseError);
+          return {
+            ...workout,
+            exercise_count: 0,
+            set_count: 0,
+            template_id: workout.template_id
+          };
+        }
+
+        // Get template exercise IDs
+        const { data: exerciseIds, error: exerciseIdsError } = await supabase
+          .from('template_exercises')
+          .select('id')
+          .eq('template_id', workout.template_id);
+
+        let setCount = 0;
+        if (!exerciseIdsError && exerciseIds && exerciseIds.length > 0) {
+          const ids = exerciseIds.map(ex => ex.id);
+          const { count, error: setError } = await supabase
+            .from('template_exercise_sets')
+            .select('*', { count: 'exact', head: true })
+            .in('template_exercise_id', ids);
+
+          if (!setError) {
+            setCount = count || 0;
+          }
+        }
+
         return {
           id: workout.id,
           name: workout.name,
           description: workout.description,
           muscles: workout.muscles || [],
           estimated_duration: workout.estimated_duration || '0 min',
-          exercise_count: 0, // We'll fetch this data later asynchronously
-          set_count: 0,      // We'll fetch this data later asynchronously
+          exercise_count: exerciseCount || 0,
+          set_count: setCount,
           template_id: workout.template_id
         };
-      });
+      }));
 
-      // Update state with the basic workout data
       setWorkouts(processedWorkouts);
-      setInitialDataFetched(true);
-      
-      // Later, fetch the exercise counts separately to prevent infinite loops
-      if (isMounted) {
-        fetchWorkoutDetails(processedWorkouts);
-      }
-      
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching program:', err);
-      setError(handleApiError(err));
+      setError(err.message);
     } finally {
       setLoading(false);
-      fetchingRef.current = false;
-    }
-  };
-
-  // Separate function to fetch workout details without blocking the UI
-  const fetchWorkoutDetails = async (workoutsToUpdate: Workout[]) => {
-    try {
-      const updatedWorkouts = [...workoutsToUpdate];
-      
-      // Only process a limited number of workouts at once to avoid overwhelming the API
-      const MAX_WORKOUTS_TO_PROCESS = 5;
-      const workoutsToProcess = updatedWorkouts.slice(0, MAX_WORKOUTS_TO_PROCESS);
-      
-      // Process each workout sequentially to avoid overwhelming the API
-      for (let i = 0; i < workoutsToProcess.length; i++) {
-        const workout = workoutsToProcess[i];
-        
-        if (!isMounted) return; // Exit if component unmounted
-
-        // Add a small delay between API calls to prevent rate limiting
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-
-        try {
-          console.log(`Fetching details for workout: ${workout.name}`);
-          
-          // Get exercise count - use a simplified approach first
-          let exerciseCount = 0;
-          let exerciseIds: any[] = [];
-          
-          try {
-            const { count, error } = await supabase
-              .from('template_exercises')
-              .select('*', { count: 'exact', head: true })
-              .eq('template_id', workout.template_id);
-              
-            if (!error) {
-              exerciseCount = count || 0;
-              
-              // Only fetch IDs if we have exercises
-              if (exerciseCount > 0) {
-                const { data, error: idsError } = await supabase
-                  .from('template_exercises')
-                  .select('id')
-                  .eq('template_id', workout.template_id);
-                  
-                if (!idsError && data) {
-                  exerciseIds = data;
-                }
-              }
-            }
-          } catch (err) {
-            console.error(`Error fetching exercise count for ${workout.name}:`, err);
-            exerciseCount = 0;
-          }
-            
-          let setCount = 0;
-          
-          if (exerciseIds && exerciseIds.length > 0) {
-            try {
-              const ids = exerciseIds.map(ex => ex.id);
-              const { count } = await supabase
-                .from('template_exercise_sets')
-                .select('*', { count: 'exact', head: true })
-                .in('template_exercise_id', ids);
-                
-              setCount = count || 0;
-            } catch (err) {
-              console.error(`Error fetching set count for ${workout.name}:`, err);
-            }
-          }
-
-          // Update the workout with the counts
-          updatedWorkouts[i] = {
-            ...workout,
-            exercise_count: exerciseCount || 0,
-            set_count: setCount
-          };
-          
-          console.log(`Updated details for ${workout.name}: ${exerciseCount} exercises, ${setCount} sets`);
-        } catch (err) {
-          console.error(`Error fetching details for workout ${workout.name}:`, err);
-          // Continue with the next workout rather than failing the entire operation
-        }
-      }
-
-      if (isMounted) {
-        setWorkouts(updatedWorkouts);
-      }
-    } catch (err) {
-      console.error('Error updating workout details:', err);
-      // Don't set error state - just log the error since this is a background update
     }
   };
 
@@ -273,11 +209,11 @@ export default function EditProgramScreen() {
       if (programError) throw programError;
 
       // Update workout order
-      for (let i = 0; i < workouts.length; i++) {
+      for (let i = 0; i < reorderedWorkouts.length; i++) {
         const { error: workoutError } = await supabase
           .from('program_workouts')
           .update({ order: i })
-          .eq('id', workouts[i].id)
+          .eq('id', reorderedWorkouts[i].id)
           .eq('program_id', id);
 
         if (workoutError) throw workoutError;
@@ -285,9 +221,9 @@ export default function EditProgramScreen() {
 
       Alert.alert('Success', 'Program updated successfully');
       router.back();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving program:', err);
-      setError(handleApiError(err));
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -308,9 +244,9 @@ export default function EditProgramScreen() {
 
       // Update local state after successful deletion
       setWorkouts(prev => prev.filter(w => w.id !== workoutId));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting workout:', err);
-      setError(handleApiError(err));
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -342,7 +278,6 @@ export default function EditProgramScreen() {
       if (addError) throw addError;
 
       // After adding to database, update local state
-      // Include both original data and template_id
       if (addedWorkouts) {
         const newWorkouts = addedWorkouts.map((workout, index) => {
           const originalWorkout = selectedWorkouts[index];
@@ -362,29 +297,45 @@ export default function EditProgramScreen() {
       }
       
       setShowWorkoutSelection(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error adding workouts:', err);
-      setError(handleApiError(err));
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleWorkoutInfo = (workout: Workout) => {
-    // Navigate to workout details using template_id instead of workout.id
-    if (workout.template_id) {
-      router.push(`/modals/workouts/${workout.template_id}`);
-    } else {
-      console.warn(`No template_id found for workout: ${workout.name}`);
+    setSelectedWorkout(workout);
+    setShowWorkoutDetails(true);
+  };
+
+  const handleDeleteProgram = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { error: deleteError } = await supabase
+        .from('programs')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+
+      // Signal that programs list needs refresh
+      setNeedsRefresh(true);
+      
+      // Close modal and navigate back
+      setShowDeleteConfirmation(false);
+      router.back();
+    } catch (err: any) {
+      console.error('Error deleting program:', err);
+      setError(err.message);
+      setLoading(false);
     }
   };
 
-  const handleWorkoutReorder = (newOrder: Workout[]) => {
-    console.log('Reordering workouts', newOrder.length);
-    setWorkouts(newOrder);
-  };
-
-  if (loading && workouts.length === 0 && !initialDataFetched) {
+  if (loading && workouts.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Loading program...</Text>
@@ -460,16 +411,41 @@ export default function EditProgramScreen() {
         </Pressable>
       </View>
 
-      <ProgramContent 
-        workouts={workouts}
-        onWorkoutDelete={handleDeleteWorkout}
-        onWorkoutInfo={handleWorkoutInfo}
-        onWorkoutPress={(templateId) => router.push(`/modals/workouts/${templateId}`)}
-        onAddWorkout={() => setShowWorkoutSelection(true)}
-        onReorderWorkouts={handleWorkoutReorder}
-        loading={loading && !initialDataFetched}
-        error={error}
-      />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ScrollView 
+          ref={scrollRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.workoutsList}
+          showsVerticalScrollIndicator={true}
+        >
+          {(reorderedWorkouts || []).map((workout, index) => (
+            <DraggableWorkoutCard
+              key={workout.id}
+              workout={workout}
+              index={index}
+              onDragEnd={handleDragEnd}
+              onRemove={handleDeleteWorkout}
+              onPress={() => router.push(`/modals/workouts/${workout.template_id}`)}
+              onInfo={handleWorkoutInfo}
+              totalWorkouts={workouts.length}
+              isInProgram={true} // Flag that this is a program workout
+              activeIndex={activeIndex}
+              itemOffsets={itemOffsets}
+              itemTranslations={itemTranslations}
+              updateItemHeight={updateItemHeight}
+              handleDragActive={handleDragActive}
+            />
+          ))}
+
+          <Pressable 
+            style={styles.addWorkoutButton}
+            onPress={() => setShowWorkoutSelection(true)}
+          >
+            <Plus size={20} color="#ccfbf1" />
+            <Text style={styles.addWorkoutText}>Add Workout</Text>
+          </Pressable>
+        </ScrollView>
+      </GestureHandlerRootView>
 
       {error && (
         <Animated.View 
@@ -480,18 +456,23 @@ export default function EditProgramScreen() {
         </Animated.View>
       )}
 
-      {workouts.length > 0 && (
-        <View style={styles.bottomButtonContainer}>
-          <Pressable 
-            style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={loading}
-          >
-            <Text style={styles.saveButtonText}>Save Changes</Text>
-            <ChevronRight size={20} color="#021a19" />
-          </Pressable>
-        </View>
-      )}
+      <View style={styles.bottomButtonContainer}>
+        <Pressable 
+          style={styles.deleteButton}
+          onPress={() => setShowDeleteConfirmation(true)}
+        >
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </Pressable>
+
+        <Pressable 
+          style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          <Text style={styles.saveButtonText}>Save Changes</Text>
+          <ChevronRight size={20} color="#021a19" />
+        </Pressable>
+      </View>
 
       <ProgramMetricsModal
         visible={showMetrics}
@@ -507,6 +488,22 @@ export default function EditProgramScreen() {
         visible={showWorkoutSelection}
         onClose={() => setShowWorkoutSelection(false)}
         onSelect={handleWorkoutSelection}
+      />
+
+      {selectedWorkout && (
+        <WorkoutDetailsModal
+          visible={showWorkoutDetails}
+          onClose={() => setShowWorkoutDetails(false)}
+          workout={selectedWorkout}
+        />
+      )}
+
+      <DeleteProgramModal
+        visible={showDeleteConfirmation}
+        onClose={() => setShowDeleteConfirmation(false)}
+        onConfirm={handleDeleteProgram}
+        loading={loading}
+        programName={name}
       />
     </View>
   );
@@ -637,6 +634,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  scrollView: {
+    flex: 1,
+  },
+  workoutsList: {
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 140 : 120,
+  },
+  addWorkoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0d3d56',
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+    marginTop: 16,
+  },
+  addWorkoutText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ccfbf1',
+    marginLeft: 8,
+  },
   errorMessage: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 160 : 140,
@@ -646,7 +666,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    zIndex: 10,
   },
   errorText: {
     color: '#ef4444',
@@ -664,8 +683,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     zIndex: 100,
   },
-  saveButton: {
+  deleteButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#450a0a',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    minHeight: 56,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+        elevation: 12,
+      },
+    }),
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ef4444',
+  },
+  saveButton: {
+    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

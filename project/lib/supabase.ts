@@ -1,156 +1,192 @@
+import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
-// Simple in-memory storage implementation
-const memoryStorage = {
-  data: new Map<string, string>(),
-  getItem: async (key: string): Promise<string | null> => {
-    return memoryStorage.data.get(key) || null;
-  },
-  setItem: async (key: string, value: string): Promise<void> => {
-    memoryStorage.data.set(key, value);
-  },
-  removeItem: async (key: string): Promise<void> => {
-    memoryStorage.data.delete(key);
-  }
-};
+// Supabase configuration
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Determine storage based on platform
-const getStorage = () => {
-  if (Platform.OS === 'web') {
-    // Use localStorage for web
-    return {
-      getItem: (key: string) => {
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+// Custom storage implementation with error handling
+const customStorage = {
+  getItem: async (key: string) => {
+    try {
+      if (Platform.OS === 'web' && typeof window === 'undefined') {
+        return null;
+      }
+      const value = await AsyncStorage.getItem(key);
+      if (value) {
+        // Validate JWT data before returning
         try {
-          const item = localStorage.getItem(key);
-          return Promise.resolve(item);
-        } catch (error) {
-          return Promise.resolve(null);
-        }
-      },
-      setItem: (key: string, value: string) => {
-        try {
-          localStorage.setItem(key, value);
-          return Promise.resolve();
-        } catch (error) {
-          return Promise.resolve();
-        }
-      },
-      removeItem: (key: string) => {
-        try {
-          localStorage.removeItem(key);
-          return Promise.resolve();
-        } catch (error) {
-          return Promise.resolve();
+          const parsed = JSON.parse(value);
+          if (parsed?.session?.access_token) {
+            return value;
+          }
+        } catch (e) {
+          await AsyncStorage.removeItem(key);
+          return null;
         }
       }
-    };
-  }
-  
-  // Use our simple memory storage implementation for non-web platforms
-  return memoryStorage;
-};
-
-// Handle environment variables properly with fallbacks
-// These are the actual hardcoded values for development
-const FALLBACK_URL = 'https://rokicoqziukzgvhpoclk.supabase.co';
-const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJva2ljb3F6aXVremd2aHBvY2xrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTE0NTIxNDcsImV4cCI6MjAyNzAyODE0N30.2WExxcUCd1VHx6VGdG2fJP4MdJl3iL4XXkTTGl3VZUo';
-
-// Try to get from env variables, fallback to hardcoded values if not available
-const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || FALLBACK_URL).trim();
-const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || FALLBACK_KEY).trim();
-
-console.log('Supabase URL being used:', supabaseUrl);
-console.log('API Key length:', supabaseAnonKey.length, 'characters');
-
-// Configure custom fetch to handle CORS issues
-const customFetch = async (url: RequestInfo | URL, options: RequestInit = {}) => {
-  // Add headers that might help with CORS
-  const fetchOptions: RequestInit = {
-    ...options,
-    headers: {
-      ...options.headers,
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      // Explicitly add apikey header
-      'apikey': supabaseAnonKey,
-      'Authorization': `Bearer ${supabaseAnonKey}`
+      return null;
+    } catch (error) {
+      console.error('Error getting item from AsyncStorage:', error);
+      return null;
     }
-  };
-
-  try {
-    const response = await fetch(url, fetchOptions);
-    
-    // Log errors for debugging
-    if (!response.ok) {
-      console.error(`Supabase request failed: ${response.status} ${response.statusText}`);
-      try {
-        const errorData = await response.json();
-        console.error('Error details:', errorData);
-      } catch (e) {
-        // If we can't parse the error as JSON, just log the raw text
-        console.error('Error response:', await response.text());
+  },
+  setItem: async (key: string, value: string) => {
+    try {
+      if (Platform.OS === 'web' && typeof window === 'undefined') {
+        return;
       }
+      await AsyncStorage.setItem(key, value);
+    } catch (error) {
+      console.error('Error setting item in AsyncStorage:', error);
     }
-    
-    return response;
-  } catch (error) {
-    console.error('Fetch error:', error);
-    throw error;
+  },
+  removeItem: async (key: string) => {
+    try {
+      if (Platform.OS === 'web' && typeof window === 'undefined') {
+        return;
+      }
+      await AsyncStorage.removeItem(key);
+    } catch (error) {
+      console.error('Error removing item from AsyncStorage:', error);
+    }
   }
 };
 
-// Create the Supabase client with proper configuration
+// Create the Supabase client with enhanced error handling
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: getStorage(),
+    storage: customStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: Platform.OS === 'web',
+    detectSessionInUrl: false,
+    flowType: 'pkce',
+    debug: true,
+    // Add JWT claim validation
+    onAuthStateChange: async (event, session) => {
+      if (event === 'SIGNED_IN') {
+        if (!session?.user?.id || !session?.access_token) {
+          console.warn('Invalid session detected, clearing auth state');
+          await supabase.auth.signOut();
+          return;
+        }
+      }
+    },
   },
   global: {
-    fetch: customFetch as any,
     headers: {
-      // Add the apikey to all requests
       'apikey': supabaseAnonKey,
-      'Authorization': `Bearer ${supabaseAnonKey}`
+    },
+    fetch: async (url, options = {}) => {
+      try {
+        // Get current session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // Set up headers
+        const headers = {
+          ...options.headers,
+          'apikey': supabaseAnonKey,
+        };
+
+        // Add Authorization header if we have a session
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        // Add retry logic for failed requests
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (attempts < maxAttempts) {
+          try {
+            const response = await fetch(url, {
+              ...options,
+              headers,
+            });
+
+            // Handle auth errors
+            if (response.status === 401 || response.status === 403) {
+              const data = await response.json();
+              if (data?.message?.includes('JWT') || data?.message?.includes('invalid')) {
+                console.warn('Invalid JWT detected, signing out');
+                await supabase.auth.signOut();
+                throw new Error('Session expired. Please sign in again.');
+              }
+            }
+
+            return response;
+          } catch (error: any) {
+            attempts++;
+            if (attempts === maxAttempts || error.message.includes('Session expired')) {
+              throw error;
+            }
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+          }
+        }
+
+        throw new Error('Request failed after multiple attempts');
+      } catch (error: any) {
+        console.error('Supabase request failed:', {
+          url,
+          error: error.message,
+        });
+        throw error;
+      }
     }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 1,
+    },
+  },
+  db: {
+    schema: 'public',
   },
 });
 
-// Helper function to handle common API errors
-export const handleApiError = (error: any): string => {
-  console.error('API Error:', error);
-  
-  // Check if it's a CORS error
-  if (error.message && error.message.includes('CORS')) {
-    return 'Cross-origin request blocked. Please check your CORS configuration.';
+// Helper function to safely make authenticated requests
+export async function withAuth<T>(
+  callback: () => Promise<T>,
+  fallback: T
+): Promise<T> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.user?.id || !session?.access_token) {
+      console.warn('No valid session found for authenticated request');
+      return fallback;
+    }
+    
+    return await callback();
+  } catch (error) {
+    console.error('Error in authenticated request:', error);
+    return fallback;
   }
-  
-  // Check for network errors
-  if (error.message && (error.message.includes('Network') || error.message.includes('fetch'))) {
-    return 'Network error. Please check your connection.';
-  }
-  
-  // Check for authentication errors
-  if (error.status === 401 || (error.code && error.code === 'PGRST301')) {
-    return 'Authentication error. Please sign in again.';
-  }
+}
 
-  // Check for missing API key errors
-  if (error.message && error.message.includes('No API key')) {
-    return 'API key missing. Check your Supabase configuration.';
-  }
-
-  // Check for invalid refresh token
-  if (error.message && error.message.includes('Invalid Refresh Token')) {
+// Helper function to handle Supabase errors consistently
+export function handleSupabaseError(error: any): string {
+  if (error?.message?.includes('JWT') || error?.message?.includes('claim')) {
     return 'Your session has expired. Please sign in again.';
   }
-
-  // Get the Supabase error message if available
-  if (error.message) {
-    return error.message;
+  if (error?.message?.includes('timeout')) {
+    return 'The request timed out. Please try again.';
   }
-  
-  return 'An unknown error occurred';
-};
+  if (error?.status === 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
+  if (error?.status === 503) {
+    return 'The service is temporarily unavailable. Please try again in a moment.';
+  }
+  if (error?.status === 401 || error?.status === 403) {
+    return 'Authentication failed. Please sign in again.';
+  }
+  return error?.message || 'An unexpected error occurred';
+}
