@@ -1,12 +1,13 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert } from 'react-native';
 import { ChevronRight, Mail, Star, Globe, LogOut, Bell, Shield, CircleHelp as HelpCircle, Gift } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
-import { supabase } from '@/lib/supabase';
+import { supabase, withAuth } from '@/lib/supabase';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type UserProfile = {
   full_name: string;
@@ -51,35 +52,68 @@ export default function SettingsScreen() {
   }, []);
 
   const fetchUserProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    // Use the withAuth helper to safely make authenticated requests
+    await withAuth(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.warn('No authenticated user found when fetching profile');
+          return null;
+        }
 
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.id)
+          .single();
 
-      if (error) throw error;
-      setUserProfile(data);
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-    }
+        if (error) {
+          console.error('Error fetching user profile:', error);
+          return null;
+        }
+        
+        setUserProfile(data);
+        return data;
+      } catch (error) {
+        console.error('Unexpected error fetching user profile:', error);
+        return null;
+      }
+    }, null);
   };
 
   const handleLogout = async () => {
     try {
       setLoading(true);
+      
+      // First make sure we clear local storage directly to prevent token issues
+      await AsyncStorage.removeItem('auth-storage');
+      
+      // Then use the signOut method, which now only does a local signout
       await signOut();
+      
+      // Update UI state
       setShowLogoutModal(false);
       setShowSuccessMessage(true);
       
+      // Navigate to login screen after a short delay
       setTimeout(() => {
         router.replace('/login');
       }, 1500);
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Unexpected logout error:', error);
+      
+      // Even in case of error, try to force navigation to login
+      Alert.alert(
+        "Logout Issue",
+        "There was a problem logging out properly. The app will restart to fix this.",
+        [
+          { 
+            text: "OK", 
+            onPress: () => router.replace('/login')
+          }
+        ]
+      );
+    } finally {
       setLoading(false);
     }
   };
@@ -112,12 +146,10 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-       
-
         {menuSections.map((section, index) => (
           <View key={section.title} style={[styles.section, index > 0 && styles.sectionMargin]}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
-            {section.items.map((item, itemIndex) => (
+            {section.items.map((item) => (
               <Pressable key={item.label} style={styles.menuItem}>
                 <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
                   <item.icon size={20} color="#021a19" />
@@ -236,43 +268,6 @@ const styles = StyleSheet.create({
     color: '#021a19',
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-  },
-  statsOverview: {
-    flexDirection: 'row',
-    backgroundColor: '#0d3d56',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 24,
-    padding: 20,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#ccfbf1',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#5eead4',
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#0f766e',
   },
   section: {
     padding: 24,
