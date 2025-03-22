@@ -1,33 +1,20 @@
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { TrendingUp, Calendar, Award, Plus, Dumbbell, Scale, Timer } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/lib/auth/store';
+import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
-  const [userName, setUserName] = useState('');
+  const router = useRouter();
+  const { userProfile, fetchUserProfile } = useAuthStore();
+  const userName = userProfile?.full_name || userProfile?.username || 'there';
 
   useEffect(() => {
-    fetchUserProfile();
-  }, []);
-
-  const fetchUserProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('username')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-      setUserName(data.username || 'there');
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      setUserName('there');
+    // Attempt to fetch/refresh user profile when the component mounts
+    if (!userProfile) {
+      fetchUserProfile();
     }
-  };
+  }, [fetchUserProfile, userProfile]);
 
   return (
     <View style={styles.container}>
@@ -69,7 +56,10 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.quickActions}>
-          <Pressable style={styles.actionButton}>
+          <Pressable 
+            style={styles.actionButton}
+            onPress={() => router.push('/modals/workouts/new')}
+          >
             <View style={styles.actionIcon}>
               <Dumbbell size={24} color="#021a19" />
             </View>

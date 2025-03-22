@@ -1,0 +1,99 @@
+import { supabase } from "./supabase";
+
+/**
+ * Check if we're in a browser environment
+ */
+const isBrowser = typeof window !== 'undefined';
+
+/**
+ * Debug function to check current authentication state
+ * Useful for troubleshooting auth issues
+ */
+export async function debugAuth() {
+  try {
+    console.log('===== AUTH DEBUGGING =====');
+    console.log('Environment:', isBrowser ? 'Browser' : 'Server');
+    
+    // Check if we have a session
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    console.log('Session check:', sessionError ? 'ERROR' : 'OK');
+    console.log('Has session:', sessionData.session ? 'YES' : 'NO');
+    
+    if (sessionData.session) {
+      console.log('Session expires at:', new Date(sessionData.session.expires_at * 1000).toISOString());
+      console.log('Current time:', new Date().toISOString());
+      console.log('Session expired:', new Date() > new Date(sessionData.session.expires_at * 1000) ? 'YES' : 'NO');
+    }
+    
+    // Check if we can get the user
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    console.log('User check:', userError ? 'ERROR' : 'OK');
+    console.log('Has user:', userData.user ? 'YES' : 'NO');
+    
+    let profileData;
+    let profileError;
+    
+    if (userData.user) {
+      console.log('User ID:', userData.user.id);
+      console.log('User email:', userData.user.email);
+      
+      // Try to get the user profile
+      const profileResult = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userData.user.id)
+        .single();
+        
+      profileData = profileResult.data;
+      profileError = profileResult.error;
+        
+      console.log('Profile check:', profileError ? 'ERROR' : 'OK');
+      console.log('Has profile:', profileData ? 'YES' : 'NO');
+      
+      if (profileData) {
+        console.log('Username:', profileData.username);
+        console.log('Full name:', profileData.full_name);
+      } else if (profileError) {
+        console.log('Profile error:', profileError.message);
+      }
+    } else if (userError) {
+      console.log('User error:', userError.message);
+    }
+    
+    console.log('=========================');
+    
+    return {
+      environment: isBrowser ? 'browser' : 'server',
+      hasSession: !!sessionData.session,
+      hasUser: !!userData.user,
+      hasProfile: !!profileData,
+      sessionError: sessionError?.message,
+      userError: userError?.message,
+      profileError: profileError?.message
+    };
+  } catch (error) {
+    console.error('Debugging error:', error);
+    return { error: 'Debugging failed' };
+  }
+}
+
+/**
+ * Force a refresh of the session token
+ * Useful when auth is working but tokens may be stale
+ */
+export async function refreshSession() {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    console.log('Session refresh:', error ? 'FAILED' : 'SUCCESS');
+    
+    if (error) {
+      console.error('Refresh error:', error.message);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true, session: data.session };
+  } catch (error) {
+    console.error('Refresh failed:', error);
+    return { success: false, error: 'Refresh failed' };
+  }
+}
