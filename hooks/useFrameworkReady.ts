@@ -6,8 +6,11 @@ declare global {
   }
 }
 
+// Modified hook that checks for window existence before using it
 export function useFrameworkReady() {
   useEffect(() => {
-    window.frameworkReady?.()
-  })
+    if (typeof window !== 'undefined' && window.frameworkReady) {
+      window.frameworkReady();
+    }
+  }, []);
 }

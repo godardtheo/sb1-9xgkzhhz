@@ -1,8 +1,8 @@
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, ScrollView, Platform } from 'react-native';
-import { Search, X, Check, Filter } from 'lucide-react-native';
+import { Search, X, Check } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import Animated, { FadeIn, SlideInDown, SlideOutDown, Layout } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type Workout = {
   id: string;
@@ -10,19 +10,22 @@ type Workout = {
   description: string | null;
   muscles: string[];
   estimated_duration: string;
-  exercise_count: number;
+  exercise_count?: number;
+  set_count?: number;
 };
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onSelect: (workouts: Workout[]) => void;
+  excludeWorkouts?: string[];
 };
 
-export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Props) {
+export default function WorkoutSelectionModal({ visible, onClose, onSelect, excludeWorkouts = [] }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
+  const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -32,50 +35,82 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
 
   useEffect(() => {
     if (visible) {
-      fetchWorkouts();
+      fetchAllWorkouts();
     } else {
       setSelectedWorkouts([]);
       setSearchQuery('');
-      setSelectedMuscles([]);
+      setSelectedMuscle('');
     }
   }, [visible]);
 
-  const fetchWorkouts = async () => {
+  useEffect(() => {
+    filterWorkouts();
+  }, [selectedMuscle, searchQuery, workouts]);
+
+  const fetchAllWorkouts = async () => {
     try {
       setLoading(true);
+      
+      // Get the current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Fetch all workout templates
       let query = supabase
         .from('workout_templates')
-        .select(`
-          id,
-          name,
-          description,
-          muscles,
-          estimated_duration,
-          template_exercises (count)
-        `)
-        .eq('user_id', user.id);
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
 
-      if (searchQuery) {
-        query = query.ilike('name', `%${searchQuery}%`);
+      if (excludeWorkouts.length > 0) {
+        query = query.not('id', 'in', `(${excludeWorkouts.join(',')})`);
       }
 
-      if (selectedMuscles.length > 0) {
-        query = query.overlaps('muscles', selectedMuscles);
+      const { data: workoutTemplates, error: workoutsError } = await query;
+      
+      if (workoutsError) {
+        console.error('Error fetching workouts:', workoutsError);
+        return;
       }
 
-      const { data, error } = await query;
+      // For each workout, get exercise count and set count
+      const workoutsWithStats = await Promise.all((workoutTemplates || []).map(async (template) => {
+        // Get exercise count
+        const { count: exerciseCount } = await supabase
+          .from('template_exercises')
+          .select('*', { count: 'exact', head: true })
+          .eq('template_id', template.id);
 
-      if (error) throw error;
+        // Get template exercise IDs
+        const { data: exerciseIds } = await supabase
+          .from('template_exercises')
+          .select('id')
+          .eq('template_id', template.id);
+        
+        // Get set count
+        let setCount = 0;
+        if (exerciseIds && exerciseIds.length > 0) {
+          const ids = exerciseIds.map(ex => ex.id);
+          const { count: setsCount } = await supabase
+            .from('template_exercise_sets')
+            .select('*', { count: 'exact', head: true })
+            .in('template_exercise_id', ids);
+          
+          setCount = setsCount || 0;
+        }
 
-      const formattedWorkouts = data.map(workout => ({
-        ...workout,
-        exercise_count: workout.template_exercises[0].count
+        return {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          muscles: template.muscles || [],
+          estimated_duration: template.estimated_duration || '0 min',
+          exercise_count: exerciseCount || 0,
+          set_count: setCount
+        };
       }));
-
-      setWorkouts(formattedWorkouts);
+      
+      setWorkouts(workoutsWithStats);
     } catch (error) {
       console.error('Error fetching workouts:', error);
     } finally {
@@ -83,12 +118,30 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
     }
   };
 
-  const toggleMuscleFilter = (muscle: string) => {
-    setSelectedMuscles(prev => 
-      prev.includes(muscle)
-        ? prev.filter(m => m !== muscle)
-        : [...prev, muscle]
-    );
+  const filterWorkouts = () => {
+    let filtered = [...workouts];
+
+    if (searchQuery) {
+      filtered = filtered.filter(workout => 
+        workout.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (selectedMuscle) {
+      filtered = filtered.filter(workout => 
+        workout.muscles?.includes(selectedMuscle)
+      );
+    }
+
+    setFilteredWorkouts(filtered);
+  };
+
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  const handleMuscleSelect = (muscle: string) => {
+    setSelectedMuscle(muscle === selectedMuscle ? '' : muscle);
   };
 
   const toggleWorkoutSelection = (workoutId: string) => {
@@ -104,6 +157,7 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
       selectedWorkouts.includes(workout.id)
     );
     onSelect(selectedItems);
+    onClose();
   };
 
   return (
@@ -115,15 +169,10 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <Animated.View 
-          style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.springify().damping(15)}
-          layout={Layout.springify().damping(15)}
-        >
+        <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.header}>
-              <Text style={styles.title}>Select Workouts</Text>
+              <Text style={styles.title}>Workout selection</Text>
               <Pressable 
                 onPress={onClose}
                 style={styles.closeButton}
@@ -137,15 +186,11 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
               <Search size={20} color="#5eead4" />
               <TextInput
                 style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
-                placeholder="Search workouts"
+                placeholder="Search workouts..."
                 placeholderTextColor="#5eead4"
                 value={searchQuery}
-                onChangeText={(text) => {
-                  setSearchQuery(text);
-                  fetchWorkouts();
-                }}
+                onChangeText={handleSearch}
               />
-              <Filter size={20} color="#5eead4" />
             </View>
 
             <ScrollView 
@@ -159,16 +204,13 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
                   key={muscle}
                   style={[
                     styles.muscleGroupButton,
-                    selectedMuscles.includes(muscle) && styles.selectedMuscleGroup
+                    selectedMuscle === muscle && styles.selectedMuscleGroup
                   ]}
-                  onPress={() => {
-                    toggleMuscleFilter(muscle);
-                    fetchWorkouts();
-                  }}
+                  onPress={() => handleMuscleSelect(muscle)}
                 >
                   <Text style={[
                     styles.muscleGroupText,
-                    selectedMuscles.includes(muscle) && styles.selectedMuscleGroupText
+                    selectedMuscle === muscle && styles.selectedMuscleGroupText
                   ]}>
                     {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
                   </Text>
@@ -182,10 +224,10 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
             >
               {loading ? (
                 <Text style={styles.statusText}>Loading workouts...</Text>
-              ) : workouts.length === 0 ? (
+              ) : filteredWorkouts.length === 0 ? (
                 <Text style={styles.statusText}>No workouts found</Text>
               ) : (
-                workouts.map((workout) => {
+                filteredWorkouts.map((workout) => {
                   const isSelected = selectedWorkouts.includes(workout.id);
                   return (
                     <Pressable
@@ -193,49 +235,62 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
                       style={styles.workoutItemContainer}
                       onPress={() => toggleWorkoutSelection(workout.id)}
                     >
-                      <View 
+                      <Animated.View 
                         style={[
                           styles.workoutItem,
                           isSelected && styles.workoutItemSelected
                         ]}
+                        entering={FadeIn.duration(200)}
+                        exiting={FadeOut.duration(200)}
                       >
                         <View style={styles.workoutContent}>
+                          <View style={styles.workoutImagePlaceholder}>
+                            <Text style={styles.workoutImageText}>
+                              {workout.name.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
                           <View style={styles.workoutInfo}>
-                            <Text style={styles.workoutName}>{workout.name}</Text>
-                            <View style={styles.workoutDetails}>
-                              <Text style={styles.workoutExerciseCount}>
-                                {workout.exercise_count} exercises
-                              </Text>
-                              <Text style={styles.workoutDuration}>
-                                {workout.estimated_duration}
+                            <Text 
+                              style={styles.workoutName}
+                              numberOfLines={1}
+                            >
+                              {workout.name}
+                            </Text>
+                            <View style={styles.workoutStats}>
+                              <Text style={styles.workoutStatsText}>
+                                {workout.exercise_count || 0} exercises • {workout.set_count || 0} sets • {workout.estimated_duration}
                               </Text>
                             </View>
-                            <View style={styles.muscleChips}>
-                              {workout.muscles.slice(0, 3).map((muscle, index) => (
-                                <View key={muscle} style={styles.muscleChip}>
-                                  <Text style={styles.muscleChipText}>
-                                    {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                            <View style={styles.muscleTags}>
+                              {workout.muscles && workout.muscles.slice(0, 3).map((muscle) => (
+                                <View key={muscle} style={styles.muscleTag}>
+                                  <Text style={styles.muscleTagText}>
+                                    {muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ')}
                                   </Text>
                                 </View>
                               ))}
-                              {workout.muscles.length > 3 && (
-                                <View style={[styles.muscleChip, styles.moreChip]}>
-                                  <Text style={styles.muscleChipText}>
+                              {workout.muscles && workout.muscles.length > 3 && (
+                                <View style={[styles.muscleTag, styles.moreTag]}>
+                                  <Text style={styles.muscleTagText}>
                                     +{workout.muscles.length - 3}
                                   </Text>
                                 </View>
                               )}
                             </View>
                           </View>
-                          {isSelected && (
-                            <View style={styles.checkmarkContainer}>
-                              <View style={styles.checkmark}>
+                          <View style={styles.checkmarkContainer}>
+                            {isSelected && (
+                              <Animated.View 
+                                style={styles.checkmark}
+                                entering={FadeIn.duration(200)}
+                                exiting={FadeOut.duration(200)}
+                              >
                                 <Check size={20} color="#14b8a6" />
-                              </View>
-                            </View>
-                          )}
+                              </Animated.View>
+                            )}
+                          </View>
                         </View>
-                      </View>
+                      </Animated.View>
                     </Pressable>
                   );
                 })
@@ -260,7 +315,7 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect }: Pr
               </Pressable>
             </View>
           </View>
-        </Animated.View>
+        </View>
       </View>
     </Modal>
   );
@@ -313,7 +368,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: '#ccfbf1',
-    marginHorizontal: 12,
+    marginLeft: 12,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     height: Platform.OS === 'web' ? 24 : 'auto',
@@ -370,11 +425,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 16,
     alignItems: 'center',
-    justifyContent: 'space-between',
+  },
+  workoutImagePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#0d9488',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workoutImageText: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#f0fdfa',
   },
   workoutInfo: {
     flex: 1,
-    marginRight: 16,
+    marginLeft: 12,
+    marginRight: 12,
   },
   workoutName: {
     fontSize: 16,
@@ -382,39 +450,32 @@ const styles = StyleSheet.create({
     color: '#ccfbf1',
     marginBottom: 4,
   },
-  workoutDetails: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 8,
+  workoutStats: {
+    marginBottom: 6,
   },
-  workoutExerciseCount: {
-    fontSize: 14,
+  workoutStatsText: {
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
   },
-  workoutDuration: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#5eead4',
-  },
-  muscleChips: {
+  muscleTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
-  muscleChip: {
-    backgroundColor: '#0d3d56',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+  muscleTag: {
+    backgroundColor: '#0d9488',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  moreChip: {
+  moreTag: {
     backgroundColor: '#134e4a',
   },
-  muscleChipText: {
+  muscleTagText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#5eead4',
+    color: '#f0fdfa',
   },
   checkmarkContainer: {
     width: 24,
