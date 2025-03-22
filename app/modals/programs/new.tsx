@@ -9,8 +9,8 @@ import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import DraggableWorkoutCard from '@/components/DraggableWorkoutCard';
 import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { getActiveProgram, updateProgramActiveState } from '@/lib/api/programs';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
+import { useProgramStore } from '@/lib/store/programStore';
 
 type SelectedWorkout = {
   id: string;
@@ -35,8 +35,9 @@ export default function NewProgramScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [selectedWorkouts, setSelectedWorkouts] = useState<SelectedWorkout[]>([]);
-  const scrollRef = useRef<ScrollView>(null);
   const [shouldCheckActive, setShouldCheckActive] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const { setNeedsRefresh, getActiveProgram } = useProgramStore();
 
   const {
     workouts: reorderedWorkouts,
@@ -59,7 +60,10 @@ export default function NewProgramScreen() {
   // Handle active toggle changes
   const handleActiveToggle = (value: boolean) => {
     setIsActive(value);
-    setShouldCheckActive(true);
+    // Only flag for check if toggling to active
+    if (value) {
+      setShouldCheckActive(true);
+    }
   };
 
   const checkActiveStatus = async () => {
@@ -132,13 +136,19 @@ export default function NewProgramScreen() {
       // If this program is set as active and there's a previous active program,
       // we need to update the active states
       if (isActive && previousProgram) {
-        await updateProgramActiveState(program.id, true, previousProgram.id);
+        // Deactivate the previous active program
+        const { error: deactivateError } = await supabase
+          .from('programs')
+          .update({ is_active: false })
+          .eq('id', previousProgram.id);
+
+        if (deactivateError) throw deactivateError;
       }
 
       // Add workouts to program using the reordered list to preserve order
       const workoutsToAdd = reorderedWorkouts.map((workout, index) => ({
         program_id: program.id,
-        // Do not include template_id as it doesn't exist in your schema
+        template_id: workout.id,
         name: workout.name,
         description: workout.description,
         muscles: workout.muscles,
@@ -161,6 +171,9 @@ export default function NewProgramScreen() {
         throw workoutsError;
       }
 
+      // Notify that program store needs refresh
+      setNeedsRefresh(true);
+      
       // Show success message and redirect
       setSaveSuccess(true);
       setTimeout(() => {
@@ -473,6 +486,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#ccfbf1',
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,

@@ -15,10 +15,25 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     try {
       setError(null);
+      
+      if (!email.trim()) {
+        setError('Email is required');
+        return;
+      }
+      
+      if (!password) {
+        setError('Password is required');
+        return;
+      }
+      
+      console.log('Signing in with:', email);
       await signIn(email, password);
+      console.log('Sign in successful');
+      
       router.replace('/(tabs)');
     } catch (err: any) {
-      setError(err.message);
+      console.error('Login error:', err);
+      setError(err.message || 'Failed to sign in');
     }
   };
 
@@ -40,6 +55,8 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            textContentType="emailAddress"
+            autoComplete="email"
           />
         </View>
 
@@ -52,6 +69,8 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            textContentType="password"
+            autoComplete="password"
           />
         </View>
 

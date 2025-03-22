@@ -3,70 +3,24 @@ import { ChevronRight, Mail, Star, Globe, LogOut, Bell, Shield, CircleHelp as He
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
-import { supabase } from '@/lib/supabase';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-type UserProfile = {
-  full_name: string;
-  username: string;
-  email: string;
-  avatar_url: string | null;
-  height: number | null;
-  gender: string | null;
-};
-
 export default function SettingsScreen() {
   const router = useRouter();
-  const { signOut } = useAuthStore();
+  const { userProfile, fetchUserProfile, signOut } = useAuthStore();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-  const menuSections = [
-    {
-      title: 'Account',
-      items: [
-        { icon: Bell, label: 'Notifications', color: '#14b8a6' },
-        { icon: Shield, label: 'Privacy', color: '#0d9488' },
-        { icon: Mail, label: 'Support', color: '#0f766e' },
-      ]
-    },
-    {
-      title: 'Preferences',
-      items: [
-        { icon: Globe, label: 'Language & Units', color: '#14b8a6' },
-        { icon: Star, label: 'Rate the App', color: '#0d9488' },
-        { icon: Gift, label: 'Premium Features', color: '#0f766e' },
-        { icon: HelpCircle, label: 'Help & FAQ', color: '#047857' },
-      ]
-    }
-  ];
 
   useEffect(() => {
-    fetchUserProfile();
-  }, []);
-
-  const fetchUserProfile = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-      setUserProfile(data);
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
+    // Ensure we have the latest user profile data
+    if (!userProfile) {
+      fetchUserProfile();
     }
-  };
+  }, [fetchUserProfile, userProfile]);
 
   const handleLogout = async () => {
     try {
@@ -112,22 +66,40 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-       
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          {[
+            { icon: Bell, label: 'Notifications', color: '#14b8a6' },
+            { icon: Shield, label: 'Privacy', color: '#0d9488' },
+            { icon: Mail, label: 'Support', color: '#0f766e' },
+          ].map((item, index) => (
+            <Pressable key={item.label} style={styles.menuItem}>
+              <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
+                <item.icon size={20} color="#021a19" />
+              </View>
+              <Text style={styles.menuText}>{item.label}</Text>
+              <ChevronRight size={20} color="#5eead4" />
+            </Pressable>
+          ))}
+        </View>
 
-        {menuSections.map((section, index) => (
-          <View key={section.title} style={[styles.section, index > 0 && styles.sectionMargin]}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            {section.items.map((item, itemIndex) => (
-              <Pressable key={item.label} style={styles.menuItem}>
-                <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
-                  <item.icon size={20} color="#021a19" />
-                </View>
-                <Text style={styles.menuText}>{item.label}</Text>
-                <ChevronRight size={20} color="#5eead4" />
-              </Pressable>
-            ))}
-          </View>
-        ))}
+        <View style={[styles.section, styles.sectionMargin]}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+          {[
+            { icon: Globe, label: 'Language & Units', color: '#14b8a6' },
+            { icon: Star, label: 'Rate the App', color: '#0d9488' },
+            { icon: Gift, label: 'Premium Features', color: '#0f766e' },
+            { icon: HelpCircle, label: 'Help & FAQ', color: '#047857' },
+          ].map((item, index) => (
+            <Pressable key={item.label} style={styles.menuItem}>
+              <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
+                <item.icon size={20} color="#021a19" />
+              </View>
+              <Text style={styles.menuText}>{item.label}</Text>
+              <ChevronRight size={20} color="#5eead4" />
+            </Pressable>
+          ))}
+        </View>
 
         <Pressable 
           style={styles.logoutButton}

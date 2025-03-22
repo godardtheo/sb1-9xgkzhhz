@@ -15,10 +15,22 @@ export default function SignupScreen() {
   const handleSignup = async () => {
     try {
       setError(null);
+      
+      if (!email.trim()) {
+        setError('Email is required');
+        return;
+      }
+      
+      if (!password || password.length < 6) {
+        setError('Password must be at least 6 characters');
+        return;
+      }
+      
       await signUp(email, password);
       router.replace('/(tabs)');
     } catch (err: any) {
-      setError(err.message);
+      console.error('Signup error:', err);
+      setError(err.message || 'Failed to create account');
     }
   };
 
@@ -40,6 +52,8 @@ export default function SignupScreen() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            textContentType="emailAddress"
+            autoComplete="email"
           />
         </View>
 
@@ -52,6 +66,8 @@ export default function SignupScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            textContentType="newPassword"
+            autoComplete="password-new"
           />
         </View>
 
