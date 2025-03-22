@@ -29,6 +29,7 @@ type Workout = {
   estimated_duration: string;
   exercise_count: number;
   set_count?: number;
+  workout_id?: string; // Added for program workout
   exercises?: Exercise[];
 };
 
@@ -36,9 +37,10 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   workout: Workout | null;
+  isInProgram?: boolean; // Flag to indicate if this is a program workout view
 };
 
-export default function WorkoutDetailsModal({ visible, onClose, workout }: Props) {
+export default function WorkoutDetailsModal({ visible, onClose, workout, isInProgram = false }: Props) {
   const [workoutDetails, setWorkoutDetails] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,9 @@ export default function WorkoutDetailsModal({ visible, onClose, workout }: Props
 
       // Create a workout details object with the current workout data
       const workoutData = { ...workout };
+
+      // Determine the correct ID to use for querying (handle program workouts differently)
+      const workoutId = isInProgram && workout.workout_id ? workout.workout_id : workout.id;
 
       // Fetch exercises for the workout
       const { data: exerciseData, error: exercisesError } = await supabase
@@ -85,7 +90,7 @@ export default function WorkoutDetailsModal({ visible, onClose, workout }: Props
             order
           )
         `)
-        .eq('template_id', workout.id)
+        .eq('template_id', workoutId)
         .order('order');
 
       if (exercisesError) {

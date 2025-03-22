@@ -1,8 +1,9 @@
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Search, ArrowLeft, X, Plus, ChevronRight } from 'lucide-react-native';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useProgramStore } from '@/lib/store/programStore';
 
 type Program = {
   id: string;
@@ -11,50 +12,63 @@ type Program = {
   weekly_workouts: number;
   is_active: boolean;
   created_at: string;
+  workout_count: number;
 };
 
 export default function ProgramsScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { programs, loading, error, fetchPrograms, needsRefresh } = useProgramStore();
+  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
 
   const muscleGroups = [
     'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
   ];
 
+  // Initial data fetch
   useEffect(() => {
     fetchPrograms();
   }, []);
 
-  const fetchPrograms = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      let query = supabase
-        .from('programs')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (searchQuery) {
-        query = query.ilike('name', `%${searchQuery}%`);
-      }
-
-      const { data, error: programsError } = await query;
-
-      if (programsError) throw programsError;
-      setPrograms(data || []);
-    } catch (err: any) {
-      console.error('Error fetching programs:', err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  // Refresh when needed
+  useEffect(() => {
+    if (needsRefresh) {
+      fetchPrograms();
     }
+  }, [needsRefresh]);
+
+  // Refresh on focus - properly wrapped in useCallback to prevent infinite loops
+  useFocusEffect(
+    useCallback(() => {
+      fetchPrograms();
+    }, [fetchPrograms])
+  );
+
+  // Filter programs based on search
+  useEffect(() => {
+    let result = [...programs];
+    
+    if (searchQuery) {
+      result = result.filter(program => 
+        program.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    if (selectedMuscles.length > 0) {
+      // Filter by muscles if we had that data
+      // Currently just keeping the existing structure
+    }
+    
+    setFilteredPrograms(result);
+  }, [programs, searchQuery, selectedMuscles]);
+
+  const toggleMuscleFilter = (muscle: string) => {
+    setSelectedMuscles(prev => 
+      prev.includes(muscle)
+        ? prev.filter(m => m !== muscle)
+        : [...prev, muscle]
+    );
   };
 
   return (
@@ -85,7 +99,7 @@ export default function ProgramsScreen() {
           />
         </View>
       </View>
-
+      
       <ScrollView 
         style={styles.programsList}
         contentContainerStyle={styles.programsListContent}
@@ -94,7 +108,7 @@ export default function ProgramsScreen() {
           <Text style={styles.statusText}>Loading programs...</Text>
         ) : error ? (
           <Text style={styles.errorText}>{error}</Text>
-        ) : programs.length === 0 ? (
+        ) : filteredPrograms.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateTitle}>No programs found</Text>
             <Text style={styles.emptyStateText}>
@@ -102,7 +116,7 @@ export default function ProgramsScreen() {
             </Text>
           </View>
         ) : (
-          programs.map((program) => (
+          filteredPrograms.map((program) => (
             <Pressable 
               key={program.id} 
               style={styles.programCard}
@@ -283,7 +297,6 @@ const styles = StyleSheet.create({
   statusText: {
     color: '#5eead4',
     textAlign: 'center',
-    marginTop: 24,
     fontFamily: 'Inter-Regular',
   },
   errorText: {

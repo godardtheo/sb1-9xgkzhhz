@@ -9,6 +9,8 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
+import ActiveProgramModal from '@/components/ActiveProgramModal';
+import { useProgramStore } from '@/lib/store/programStore';
 
 type Workout = {
   id: string;             // This is the program_workout id
@@ -32,7 +34,11 @@ export default function EditProgramScreen() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showWorkoutSelection, setShowWorkoutSelection] = useState(false);
+  const [showActiveModal, setShowActiveModal] = useState(false);
+  const [previousProgram, setPreviousProgram] = useState<{ id: string; name: string } | null>(null);
+  const [shouldCheckActive, setShouldCheckActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const { setNeedsRefresh, getActiveProgram } = useProgramStore();
 
   const {
     workouts: reorderedWorkouts,
@@ -64,6 +70,29 @@ export default function EditProgramScreen() {
     const duration = parseInt(workout.estimated_duration) || 0;
     return acc + duration;
   }, 0);
+
+  // Check if there's an active program on toggle
+  const handleActiveToggle = (value: boolean) => {
+    setIsActive(value);
+    // Only flag for check if toggling to active
+    if (value) {
+      setShouldCheckActive(true);
+    }
+  };
+
+  const checkActiveStatus = async () => {
+    // Only check if trying to activate
+    if (isActive) {
+      // Check if another program is already active
+      const activeProgram = await getActiveProgram();
+      if (activeProgram && activeProgram.id !== id) {
+        setPreviousProgram(activeProgram);
+        setShowActiveModal(true);
+        return false; // Indicate check is in progress
+      }
+    }
+    return true; // Proceed with save
+  };
 
   const fetchProgramDetails = async () => {
     try {
@@ -187,6 +216,15 @@ export default function EditProgramScreen() {
         return;
       }
 
+      // If we need to check active status and it's pending user confirmation
+      if (shouldCheckActive) {
+        const canProceed = await checkActiveStatus();
+        setShouldCheckActive(false);
+        if (!canProceed) {
+          return; // Wait for user confirmation in the modal
+        }
+      }
+
       setLoading(true);
       setError(null);
 
@@ -197,11 +235,24 @@ export default function EditProgramScreen() {
           name: name.trim(),
           description: description.trim() || null,
           is_active: isActive,
+          weekly_workouts: workouts.length,
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
 
       if (programError) throw programError;
+
+      // If this program is set as active and there's a previous active program,
+      // we need to update the active states
+      if (isActive && previousProgram && previousProgram.id !== id) {
+        // Deactivate the previous active program
+        const { error: deactivateError } = await supabase
+          .from('programs')
+          .update({ is_active: false })
+          .eq('id', previousProgram.id);
+
+        if (deactivateError) throw deactivateError;
+      }
 
       // Update workout order
       for (let i = 0; i < reorderedWorkouts.length; i++) {
@@ -214,6 +265,9 @@ export default function EditProgramScreen() {
         if (workoutError) throw workoutError;
       }
 
+      // Notify that program store needs refresh
+      setNeedsRefresh(true);
+      
       Alert.alert('Success', 'Program updated successfully');
       router.back();
     } catch (err: any) {
@@ -352,7 +406,7 @@ export default function EditProgramScreen() {
           <View style={styles.toggleContainer}>
             <Switch
               value={isActive}
-              onValueChange={setIsActive}
+              onValueChange={handleActiveToggle}
               trackColor={{ false: '#115e59', true: '#0d9488' }}
               thumbColor={isActive ? '#14b8a6' : '#5eead4'}
               style={styles.switch}
@@ -401,7 +455,7 @@ export default function EditProgramScreen() {
               onDragEnd={handleDragEnd}
               onRemove={handleDeleteWorkout}
               onPress={() => router.push(`/modals/workouts/${workout.template_id}`)}
-              onInfo={handleWorkoutInfo}
+              onInfo={() => handleWorkoutInfo(workout)}
               totalWorkouts={workouts.length}
               isInProgram={true} // Flag that this is a program workout
               activeIndex={activeIndex}
@@ -458,6 +512,20 @@ export default function EditProgramScreen() {
         visible={showWorkoutSelection}
         onClose={() => setShowWorkoutSelection(false)}
         onSelect={handleWorkoutSelection}
+      />
+
+      <ActiveProgramModal
+        visible={showActiveModal}
+        onClose={() => {
+          setShowActiveModal(false);
+          setIsActive(false);
+        }}
+        onConfirm={() => {
+          setShowActiveModal(false);
+          // Continue with the save operation - the active status stays true
+          handleSave();
+        }}
+        previousProgramName={previousProgram?.name || ''}
       />
     </View>
   );
