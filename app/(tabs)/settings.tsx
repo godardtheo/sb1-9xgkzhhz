@@ -1,19 +1,34 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
-import { ChevronRight, Mail, Star, Globe, LogOut, Bell, Shield, CircleHelp as HelpCircle, Gift } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from 'react-native';
+import { ChevronRight, Mail, Globe, LogOut, Shield, HelpCircle, Menu } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
 import EditProfileModal from '@/components/EditProfileModal';
+import HelpFAQModal from '@/components/HelpFAQModal';
+import PrivacyModal from '@/components/PrivacyModal';
+import TermsAndConditionsModal from '@/components/TermsAndConditionsModal';
 import Animated, { FadeIn } from 'react-native-reanimated';
+
+// Get app version from app.json
+const APP_VERSION = '1.0.0';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { userProfile, fetchUserProfile, signOut } = useAuthStore();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showHelpFAQModal, setShowHelpFAQModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  
+  // Preferences states
+  const [notifications, setNotifications] = useState<'yes' | 'no'>('no');
+  const [units, setUnits] = useState<'kg' | 'lb'>('kg');
+  const [language, setLanguage] = useState('English');
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
 
   useEffect(() => {
     // Ensure we have the latest user profile data
@@ -42,11 +57,12 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
         <View style={styles.header}>
           <Text style={styles.title}>Profile</Text>
         </View>
 
+        {/* Profile Section */}
         <View style={styles.profileSection}>
           <View style={styles.profileHeader}>
             <Image
@@ -66,41 +82,135 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
+        {/* Preferences Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          {[
-            { icon: Bell, label: 'Notifications', color: '#14b8a6' },
-            { icon: Shield, label: 'Privacy', color: '#0d9488' },
-            { icon: Mail, label: 'Support', color: '#0f766e' },
-          ].map((item, index) => (
-            <Pressable key={item.label} style={styles.menuItem}>
-              <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
-                <item.icon size={20} color="#021a19" />
-              </View>
-              <Text style={styles.menuText}>{item.label}</Text>
-              <ChevronRight size={20} color="#5eead4" />
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={[styles.section, styles.sectionMargin]}>
           <Text style={styles.sectionTitle}>Preferences</Text>
-          {[
-            { icon: Globe, label: 'Language & Units', color: '#14b8a6' },
-            { icon: Star, label: 'Rate the App', color: '#0d9488' },
-            { icon: Gift, label: 'Premium Features', color: '#0f766e' },
-            { icon: HelpCircle, label: 'Help & FAQ', color: '#047857' },
-          ].map((item, index) => (
-            <Pressable key={item.label} style={styles.menuItem}>
-              <View style={[styles.iconContainer, { backgroundColor: item.color }]}>
-                <item.icon size={20} color="#021a19" />
-              </View>
-              <Text style={styles.menuText}>{item.label}</Text>
-              <ChevronRight size={20} color="#5eead4" />
+          
+          {/* Notifications */}
+          <View style={styles.preferenceRow}>
+            <Text style={styles.preferenceLabel}>Notifications</Text>
+            <View style={styles.radioGroup}>
+              <Pressable 
+                style={[styles.radioButton, notifications === 'yes' && styles.radioButtonSelected]}
+                onPress={() => setNotifications('yes')}
+              >
+                <View style={[styles.radioCircle, notifications === 'yes' && styles.radioCircleSelected]} />
+                <Text style={styles.radioLabel}>Yes</Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.radioButton, notifications === 'no' && styles.radioButtonSelected]}
+                onPress={() => setNotifications('no')}
+              >
+                <View style={[styles.radioCircle, notifications === 'no' && styles.radioCircleSelected]} />
+                <Text style={styles.radioLabel}>No</Text>
+              </Pressable>
+            </View>
+          </View>
+          
+          {/* Language */}
+          <View style={styles.preferenceRow}>
+            <Text style={styles.preferenceLabel}>Language</Text>
+            <Pressable 
+              style={styles.dropdown}
+              onPress={() => setShowLanguageDropdown(!showLanguageDropdown)}
+            >
+              <Text style={styles.dropdownText}>{language}</Text>
+              <ChevronRight size={20} color="#5eead4" style={{ transform: [{ rotate: showLanguageDropdown ? '90deg' : '0deg' }] }} />
             </Pressable>
-          ))}
+            {showLanguageDropdown && (
+              <Animated.View 
+                style={styles.dropdownMenu}
+                entering={FadeIn.duration(200)}
+              >
+                <Pressable 
+                  style={[styles.dropdownItem, language === 'English' && styles.dropdownItemSelected]}
+                  onPress={() => {
+                    setLanguage('English');
+                    setShowLanguageDropdown(false);
+                  }}
+                >
+                  <Text style={styles.dropdownItemText}>English</Text>
+                </Pressable>
+              </Animated.View>
+            )}
+          </View>
+          
+          {/* Units */}
+          <View style={styles.preferenceRow}>
+            <Text style={styles.preferenceLabel}>Units</Text>
+            <View style={styles.radioGroup}>
+              <Pressable 
+                style={[styles.radioButton, units === 'kg' && styles.radioButtonSelected]}
+                onPress={() => setUnits('kg')}
+              >
+                <View style={[styles.radioCircle, units === 'kg' && styles.radioCircleSelected]} />
+                <Text style={styles.radioLabel}>kg</Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.radioButton, units === 'lb' && styles.radioButtonSelected]}
+                onPress={() => setUnits('lb')}
+              >
+                <View style={[styles.radioCircle, units === 'lb' && styles.radioCircleSelected]} />
+                <Text style={styles.radioLabel}>lb</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
 
+        {/* Info Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Info</Text>
+          
+          {/* Help & FAQ */}
+          <Pressable 
+            style={styles.menuItem}
+            onPress={() => setShowHelpFAQModal(true)}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: '#14b8a6' }]}>
+              <HelpCircle size={20} color="#021a19" />
+            </View>
+            <Text style={styles.menuText}>Help & FAQ</Text>
+            <ChevronRight size={20} color="#5eead4" />
+          </Pressable>
+          
+          {/* Privacy */}
+          <Pressable 
+            style={styles.menuItem}
+            onPress={() => setShowPrivacyModal(true)}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: '#0d9488' }]}>
+              <Shield size={20} color="#021a19" />
+            </View>
+            <Text style={styles.menuText}>Privacy</Text>
+            <ChevronRight size={20} color="#5eead4" />
+          </Pressable>
+          
+          {/* Terms and Conditions */}
+          <Pressable 
+            style={styles.menuItem}
+            onPress={() => setShowTermsModal(true)}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: '#0f766e' }]}>
+              <Menu size={20} color="#021a19" />
+            </View>
+            <Text style={styles.menuText}>Terms and Conditions</Text>
+            <ChevronRight size={20} color="#5eead4" />
+          </Pressable>
+          
+          {/* Contact and Version */}
+          <View style={styles.contactSection}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Contact:</Text>
+              <Text style={styles.infoValue}>contact@setlog.com</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Version:</Text>
+              <Text style={styles.infoValue}>{APP_VERSION}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Logout Button */}
         <Pressable 
           style={styles.logoutButton}
           onPress={() => setShowLogoutModal(true)}
@@ -108,8 +218,6 @@ export default function SettingsScreen() {
           <LogOut size={20} color="#ef4444" />
           <Text style={styles.logoutText}>Log Out</Text>
         </Pressable>
-
-        <Text style={styles.version}>Version 1.0.0</Text>
       </ScrollView>
 
       {showSuccessMessage && (
@@ -136,6 +244,21 @@ export default function SettingsScreen() {
           onUpdate={fetchUserProfile}
         />
       )}
+
+      <HelpFAQModal
+        visible={showHelpFAQModal}
+        onClose={() => setShowHelpFAQModal(false)}
+      />
+
+      <PrivacyModal
+        visible={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
+
+      <TermsAndConditionsModal
+        visible={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+      />
     </View>
   );
 }
@@ -147,6 +270,9 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: Platform.OS === 'ios' ? 120 : 100, // Add extra padding at the bottom
   },
   header: {
     padding: 24,
@@ -209,54 +335,94 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
   },
-  statsOverview: {
-    flexDirection: 'row',
-    backgroundColor: '#0d3d56',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 24,
-    padding: 20,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#ccfbf1',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#5eead4',
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#0f766e',
-  },
   section: {
     padding: 24,
-  },
-  sectionMargin: {
-    marginTop: 8,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
     marginBottom: 16,
+  },
+  preferenceRow: {
+    marginBottom: 20,
+  },
+  preferenceLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#ccfbf1',
+    marginBottom: 12,
+  },
+  radioGroup: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 20,
+  },
+  radioButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#115e59',
+  },
+  radioButtonSelected: {
+    backgroundColor: '#0f766e',
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#5eead4',
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioCircleSelected: {
+    backgroundColor: '#14b8a6',
+  },
+  radioLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#5eead4',
+  },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#115e59',
+    borderRadius: 12,
+    padding: 12,
+  },
+  dropdownText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#5eead4',
+  },
+  dropdownMenu: {
+    backgroundColor: '#115e59',
+    borderRadius: 12,
+    marginTop: 4,
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 76, // Position below the dropdown button
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  dropdownItem: {
+    padding: 12,
+  },
+  dropdownItemSelected: {
+    backgroundColor: '#0f766e',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#5eead4',
   },
   menuItem: {
     flexDirection: 'row',
@@ -288,6 +454,25 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#ccfbf1',
   },
+  contactSection: {
+    marginTop: 16,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  infoLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#ccfbf1',
+    width: 80,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#5eead4',
+    flex: 1,
+  },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,6 +482,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginHorizontal: 24,
     marginTop: 8,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -311,15 +497,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     marginLeft: 8,
-  },
-  version: {
-    textAlign: 'center',
-    color: '#5eead4',
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    marginTop: 24,
-    marginBottom: 32,
-    opacity: 0.8,
   },
   successMessage: {
     position: 'absolute',
