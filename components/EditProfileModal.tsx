@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Animated, { FadeIn, SlideInDown, SlideOutDown, Layout } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 type Props = {
   visible: boolean;
@@ -30,6 +31,21 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(userData.avatar_url);
+  const [uploading, setUploading] = useState(false);
+
+  // Reset state when modal becomes visible with new userData
+  useEffect(() => {
+    if (visible) {
+      setFullName(userData.full_name || '');
+      setUsername(userData.username || '');
+      setHeight(userData.height?.toString() || '');
+      setGender(userData.gender as Gender || '');
+      setAvatarUrl(userData.avatar_url);
+      setError(null);
+      setSuccess(false);
+    }
+  }, [visible, userData]);
 
   const handleUpdateProfile = async () => {
     try {
@@ -45,6 +61,7 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
         username,
         height: height ? parseFloat(height) : null,
         gender: gender || null,
+        avatar_url: avatarUrl,
         updated_at: new Date().toISOString(),
       };
 
@@ -79,28 +96,57 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
       });
 
       if (!result.canceled) {
-        setLoading(true);
+        setUploading(true);
+        setError(null);
+
+        // Get current user
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('Not authenticated');
 
-        const file = {
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          name: 'avatar.jpg',
-        };
+        // Create a unique file path for the avatar
+        const fileExt = result.assets[0].uri.split('.').pop();
+        const filePath = `${user.id}-${Date.now()}.${fileExt}`;
 
-        const formData = new FormData();
-        formData.append('avatar', file as any);
+        // For React Native, we need to read the file as base64
+        const fileBase64 = await FileSystem.readAsStringAsync(result.assets[0].uri, { 
+          encoding: FileSystem.EncodingType.Base64 
+        });
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Upload the file to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, decode(fileBase64), {
+            contentType: `image/${fileExt}`,
+            upsert: true
+          });
 
-        setLoading(false);
+        if (uploadError) throw uploadError;
+
+        // Get the public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+        // Update state with the new avatar URL
+        setAvatarUrl(publicUrl);
       }
     } catch (err: any) {
+      console.error('Error uploading image:', err);
       setError(err.message);
-      setLoading(false);
+    } finally {
+      setUploading(false);
     }
   };
+
+  // Helper function to decode base64
+  function decode(base64: string) {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
 
   return (
     <Modal
@@ -131,9 +177,9 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
             <View style={styles.form}>
               <Pressable style={styles.avatarButton} onPress={handlePickImage}>
                 <View style={styles.avatarContainer}>
-                  {userData.avatar_url ? (
+                  {avatarUrl ? (
                     <Image
-                      source={{ uri: userData.avatar_url }}
+                      source={{ uri: avatarUrl }}
                       style={styles.avatar}
                     />
                   ) : (
@@ -141,7 +187,11 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                   )}
                 </View>
                 <View style={styles.uploadButton}>
-                  <Upload size={16} color="#021a19" />
+                  {uploading ? (
+                    <ActivityIndicator size="small" color="#021a19" />
+                  ) : (
+                    <Upload size={16} color="#021a19" />
+                  )}
                 </View>
               </Pressable>
 
@@ -318,6 +368,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   uploadButton: {
     position: 'absolute',
