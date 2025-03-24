@@ -34,6 +34,7 @@ export async function logWeight(weight: number, notes: string = ''): Promise<boo
 
 /**
  * Gets the latest weight log for a user
+ * Returns null if no weight logs exist
  */
 export async function getLatestWeight(): Promise<number | null> {
   try {
@@ -42,20 +43,26 @@ export async function getLatestWeight(): Promise<number | null> {
     if (!user) return null;
     
     // Get the most recent weight log
+    // Removed .single() to handle empty results gracefully
     const { data, error } = await supabase
       .from('weight_logs')
       .select('weight')
       .eq('user_id', user.id)
       .order('date', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
     
     if (error) {
       console.error('Error fetching latest weight:', error);
       return null;
     }
     
-    return data ? data.weight : null;
+    // Check if any data was returned
+    if (!data || data.length === 0) {
+      return null;
+    }
+    
+    // Return the weight from the first (and only) element
+    return data[0].weight;
   } catch (error) {
     console.error('Error in getLatestWeight:', error);
     return null;
