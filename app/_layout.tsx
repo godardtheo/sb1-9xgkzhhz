@@ -60,7 +60,10 @@ export default function RootLayout() {
         {!session ? (
           <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
         ) : (
-          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <>
+            <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+            <Stack.Screen name="workout" options={{ animation: 'slide_from_right' }} />
+          </>
         )}
       </Stack>
       <StatusBar style="light" />
