@@ -1,22 +1,39 @@
-import { View, Text, StyleSheet, ScrollView, Modal, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  TextInput,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '@/lib/auth/store';
 import CurrentProgramCard from '@/components/CurrentProgramCard';
 import HistoryHomeCard from '@/components/HistoryHomeCard';
 import NewWorkoutCard from '@/components/NewWorkoutCard';
+import LogWorkoutCard from '@/components/LogWorkoutCard';
 import LogWeightCard from '@/components/LogWeightCard';
 import { X, Plus, ArrowRight } from 'lucide-react-native';
-import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  SlideInDown,
+  SlideOutDown,
+} from 'react-native-reanimated';
 import { supabase } from '@/lib/supabase';
 
 export default function HomeScreen() {
   const { userProfile, fetchUserProfile } = useAuthStore();
   const username = userProfile?.username || 'there';
-  
+
   // Workout tracking modal state
   const [showWorkoutModal, setShowWorkoutModal] = useState(false);
   const [workoutName, setWorkoutName] = useState('');
-  const [exercises, setExercises] = useState([{ name: '', sets: '', reps: '' }]);
+  const [exercises, setExercises] = useState([
+    { name: '', sets: '', reps: '' },
+  ]);
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -50,20 +67,22 @@ export default function HomeScreen() {
     try {
       setLoading(true);
       setErrorMessage('');
-      
+
       if (!workoutName.trim()) {
         setErrorMessage('Please enter a workout name');
         setLoading(false);
         return;
       }
 
-      if (exercises.some(ex => !ex.name.trim())) {
+      if (exercises.some((ex) => !ex.name.trim())) {
         setErrorMessage('All exercises must have a name');
         setLoading(false);
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         setErrorMessage('You must be logged in to save workouts');
         setLoading(false);
@@ -84,7 +103,7 @@ export default function HomeScreen() {
       if (workoutError) throw workoutError;
 
       // Save exercises
-      const exercisesData = exercises.map(ex => ({
+      const exercisesData = exercises.map((ex) => ({
         workout_id: workout.id,
         exercise_name: ex.name.trim(),
         sets: parseInt(ex.sets) || 0,
@@ -98,7 +117,7 @@ export default function HomeScreen() {
       if (exercisesError) throw exercisesError;
 
       setSuccessMessage('Workout saved successfully!');
-      
+
       // Reset form
       setTimeout(() => {
         setWorkoutName('');
@@ -116,7 +135,10 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+      >
         <View style={styles.header}>
           <View style={styles.greetingContainer}>
             <Text style={styles.greeting}>Hello </Text>
@@ -133,18 +155,10 @@ export default function HomeScreen() {
         {/* Quick Actions Row */}
         <View style={styles.quickActions}>
           <NewWorkoutCard />
-          
+
           {/* Log Workout Card */}
-          <Pressable 
-            style={styles.logWorkoutCard}
-            onPress={() => setShowWorkoutModal(true)}
-          >
-            <View style={styles.cardIcon}>
-              <Plus size={24} color="#021a19" />
-            </View>
-            <Text style={styles.cardTitle}>Log Workout</Text>
-          </Pressable>
-          
+          <LogWorkoutCard />
+
           <LogWeightCard />
         </View>
       </ScrollView>
@@ -157,22 +171,22 @@ export default function HomeScreen() {
         onRequestClose={() => setShowWorkoutModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
-            <Pressable 
-              style={styles.modalBackdrop} 
+            <Pressable
+              style={styles.modalBackdrop}
               onPress={() => setShowWorkoutModal(false)}
             />
-            <Animated.View 
+            <Animated.View
               style={styles.modalContainer}
               entering={SlideInDown.springify().damping(15)}
               exiting={SlideOutDown.springify().damping(15)}
             >
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Log Workout</Text>
-                <Pressable 
+                <Pressable
                   onPress={() => setShowWorkoutModal(false)}
                   hitSlop={8}
                 >
@@ -193,7 +207,7 @@ export default function HomeScreen() {
                 </View>
 
                 <Text style={styles.sectionHeader}>Exercises</Text>
-                
+
                 {exercises.map((exercise, index) => (
                   <View key={index} style={styles.exerciseItem}>
                     <View style={styles.exerciseFormGroup}>
@@ -201,31 +215,37 @@ export default function HomeScreen() {
                       <TextInput
                         style={styles.input}
                         value={exercise.name}
-                        onChangeText={(value) => updateExercise(index, 'name', value)}
+                        onChangeText={(value) =>
+                          updateExercise(index, 'name', value)
+                        }
                         placeholder="E.g., Bench Press"
                         placeholderTextColor="#5eead4"
                       />
                     </View>
-                    
+
                     <View style={styles.exerciseDetails}>
                       <View style={styles.exerciseFormHalf}>
                         <Text style={styles.label}>Sets</Text>
                         <TextInput
                           style={styles.input}
                           value={exercise.sets}
-                          onChangeText={(value) => updateExercise(index, 'sets', value)}
+                          onChangeText={(value) =>
+                            updateExercise(index, 'sets', value)
+                          }
                           placeholder="3"
                           placeholderTextColor="#5eead4"
                           keyboardType="numeric"
                         />
                       </View>
-                      
+
                       <View style={styles.exerciseFormHalf}>
                         <Text style={styles.label}>Reps</Text>
                         <TextInput
                           style={styles.input}
                           value={exercise.reps}
-                          onChangeText={(value) => updateExercise(index, 'reps', value)}
+                          onChangeText={(value) =>
+                            updateExercise(index, 'reps', value)
+                          }
                           placeholder="12"
                           placeholderTextColor="#5eead4"
                           keyboardType="numeric"
@@ -234,8 +254,8 @@ export default function HomeScreen() {
                     </View>
 
                     {exercises.length > 1 && (
-                      <Pressable 
-                        style={styles.removeButton} 
+                      <Pressable
+                        style={styles.removeButton}
                         onPress={() => removeExercise(index)}
                       >
                         <Text style={styles.removeButtonText}>Remove</Text>
@@ -244,7 +264,7 @@ export default function HomeScreen() {
                   </View>
                 ))}
 
-                <Pressable 
+                <Pressable
                   style={styles.addExerciseButton}
                   onPress={addExercise}
                 >
@@ -257,17 +277,19 @@ export default function HomeScreen() {
                 ) : null}
 
                 {successMessage ? (
-                  <Animated.View 
+                  <Animated.View
                     style={styles.successMessage}
                     entering={FadeIn.duration(300)}
                   >
-                    <Text style={styles.successMessageText}>{successMessage}</Text>
+                    <Text style={styles.successMessageText}>
+                      {successMessage}
+                    </Text>
                   </Animated.View>
                 ) : null}
               </ScrollView>
 
               <View style={styles.modalFooter}>
-                <Pressable 
+                <Pressable
                   style={styles.saveButton}
                   onPress={saveWorkout}
                   disabled={loading}
