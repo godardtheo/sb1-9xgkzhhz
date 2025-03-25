@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+} from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getNextWorkout } from '@/lib/workoutUtils';
@@ -32,10 +38,11 @@ export default function CurrentProgramCard() {
 
   const handlePress = () => {
     if (programData?.nextWorkout) {
-      // TODO: Navigate to LiveWorkoutModal when implemented
-      console.log('Navigate to workout:', programData.nextWorkout);
-      // router.push(`/workout/${programData.nextWorkout.template_id}`);
-      alert('LiveWorkoutModal will be implemented later');
+      // Navigate to LiveWorkoutModal with the template ID
+      router.push({
+        pathname: '/modals/live-workout',
+        params: { template_id: programData.nextWorkout.template_id },
+      });
     } else {
       // If no next workout, navigate to programs
       router.push('/modals/programs');
@@ -56,7 +63,7 @@ export default function CurrentProgramCard() {
   if (!programData) {
     return (
       <View style={styles.container}>
-        <Pressable 
+        <Pressable
           style={styles.content}
           onPress={() => router.push('/modals/programs')}
         >
@@ -76,7 +83,10 @@ export default function CurrentProgramCard() {
         <View style={styles.textContent}>
           <Text style={styles.title}>{programData.programName}</Text>
           <Text style={styles.subtitle}>
-            Next Workout: {programData.nextWorkout ? programData.nextWorkout.name : 'None scheduled'}
+            Next Workout:{' '}
+            {programData.nextWorkout
+              ? programData.nextWorkout.name
+              : 'None scheduled'}
           </Text>
         </View>
         <ChevronRight size={24} color="#5eead4" />
