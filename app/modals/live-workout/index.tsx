@@ -221,7 +221,7 @@ export default function LiveWorkoutScreen() {
                   const prevSet = previousPerformance[index] || {};
                   return {
                     id: set.id,
-                    weight: '',
+                    weight: prevSet.weight || '0', // Pre-populate with '0' if no previous data
                     reps: '',
                     completed: false,
                     previousWeight: prevSet.weight || '0',
@@ -451,10 +451,22 @@ export default function LiveWorkoutScreen() {
       exercises.map((ex) => {
         if (ex.id === exerciseId) {
           const updatedSets = [...ex.sets];
+          
+          // Update the specific set
           updatedSets[setIndex] = {
             ...updatedSets[setIndex],
             [field]: value,
           };
+
+          // If field is weight, update all subsequent sets with the same value
+          if (field === 'weight' && typeof value === 'string') {
+            for (let i = setIndex + 1; i < updatedSets.length; i++) {
+              updatedSets[i] = {
+                ...updatedSets[i],
+                weight: value,
+              };
+            }
+          }
 
           // If set is marked as completed, start rest timer
           if (field === 'completed' && value === true) {
@@ -472,9 +484,12 @@ export default function LiveWorkoutScreen() {
     setExercises(
       exercises.map((ex) => {
         if (ex.id === exerciseId) {
+          // Find the last entered weight to use as default for the new set
+          const lastEnteredWeight = ex.sets.length > 0 ? ex.sets[ex.sets.length - 1].weight : '0';
+          
           const newSet = {
             id: Date.now().toString() + Math.random().toString(36).substring(2, 9), // Use unique ID
-            weight: '',
+            weight: lastEnteredWeight, // Use the weight from the last set
             reps: '',
             completed: false,
             previousWeight: ex.sets[ex.sets.length - 1]?.previousWeight || '0',
@@ -518,7 +533,7 @@ export default function LiveWorkoutScreen() {
         .fill(null)
         .map(() => ({
           id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-          weight: '',
+          weight: '0',
           reps: '',
           completed: false,
           previousWeight: '0',
