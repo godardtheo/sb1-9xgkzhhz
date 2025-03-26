@@ -7,7 +7,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -212,18 +212,37 @@ export default function LiveExerciseCard({
     field: 'weight' | 'reps',
     value: string
   ) => {
-    // Only allow numbers and decimal point for weight
-    const filteredValue =
-      field === 'weight'
-        ? value.replace(/[^0-9.]/g, '')
-        : value.replace(/[^0-9]/g, '');
-
+    // Allow decimal values for both weight and reps
+    const filteredValue = value.replace(/[^0-9.]/g, '');
     onSetUpdate(exercise.id, setIndex, field, filteredValue);
   };
 
   // For checkbox
   const handleSetCompleted = (setIndex: number, completed: boolean) => {
     onSetUpdate(exercise.id, setIndex, 'completed', completed);
+  };
+
+  // Format previous performance data
+  const formatPreviousPerformance = (reps?: string, weight?: string) => {
+    if (reps && weight && reps !== '0' && weight !== '0') {
+      return `${reps}×${weight}kg`;
+    }
+    return '-';
+  };
+
+  // Get muscle chip color
+  const getMuscleChipColor = (muscle: string) => {
+    const muscleColors: Record<string, string> = {
+      chest: '#0e7490', // cyan
+      back: '#0f766e', // teal
+      shoulders: '#0891b2', // sky
+      legs: '#0d9488', // emerald
+      core: '#0369a1', // blue
+      biceps: '#4f46e5', // indigo
+      triceps: '#7c3aed', // violet
+      default: '#0d3d56', // default color
+    };
+    return muscleColors[muscle.toLowerCase()] || muscleColors.default;
   };
 
   // Animated styles
@@ -251,7 +270,7 @@ export default function LiveExerciseCard({
     setMeasurements({ height, y });
   };
 
-  const card = (
+  return (
     <Animated.View
       style={[styles.container, animatedStyle]}
       onLayout={onLayout}
@@ -259,62 +278,68 @@ export default function LiveExerciseCard({
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseInfo}>
           <Text style={styles.exerciseName}>{exercise.name}</Text>
-          <Text style={styles.exerciseDetail}>
-            {exercise.muscle} • {exercise.equipment}
-          </Text>
+          <View style={styles.muscleChips}>
+            <View 
+              style={[
+                styles.muscleChip, 
+                { backgroundColor: getMuscleChipColor(exercise.muscle) }
+              ]}
+            >
+              <Text style={styles.muscleChipText}>
+                {exercise.muscle.charAt(0).toUpperCase() + exercise.muscle.slice(1)}
+              </Text>
+            </View>
+            {exercise.equipment && (
+              <View style={styles.muscleChip}>
+                <Text style={styles.muscleChipText}>{exercise.equipment}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <View style={styles.exerciseActions}>
+          <Pressable onPress={onInfo} style={styles.actionButton} hitSlop={8}>
+            <Info size={20} color="#5eead4" />
+          </Pressable>
+          <Pressable
+            onPress={() => onRemove(exercise.id)}
+            style={styles.actionButton}
+            hitSlop={8}
+          >
+            <Trash2 size={20} color="#5eead4" />
+          </Pressable>
         </View>
       </View>
 
       <View style={styles.setsContainer}>
-        {/* Header row with drag button positioned correctly */}
+        {/* Header row */}
         <View style={styles.headerRow}>
-          <View style={styles.headerContent}>
-            <Text
-              style={[styles.setCell, styles.setHeaderCell, styles.setNumberCell]}
-            >
-              #
-            </Text>
-            <Text
-              style={[
-                styles.setCell,
-                styles.setHeaderCell,
-                styles.setPreviousCell,
-              ]}
-            >
-              Previous
-            </Text>
-            <Text
-              style={[styles.setCell, styles.setHeaderCell, styles.setWeightCell]}
-            >
-              kg
-            </Text>
-            <Text
-              style={[styles.setCell, styles.setHeaderCell, styles.setRepsCell]}
-            >
-              reps
-            </Text>
-            <Text
-              style={[styles.setCell, styles.setHeaderCell, styles.setCheckCell]}
-            ></Text>
-          </View>
-          
-          <View style={styles.headerActions}>
-            {onReorder && (
-              <Pressable style={styles.dragHandle} hitSlop={8}>
-                <GripVertical size={20} color="#5eead4" />
-              </Pressable>
-            )}
-            <Pressable onPress={onInfo} style={styles.actionButton} hitSlop={8}>
-              <Info size={20} color="#5eead4" />
-            </Pressable>
-            <Pressable
-              onPress={() => onRemove(exercise.id)}
-              style={styles.actionButton}
-              hitSlop={8}
-            >
-              <Trash2 size={20} color="#5eead4" />
-            </Pressable>
-          </View>
+          <Text
+            style={[styles.setCell, styles.setHeaderCell, styles.setNumberCell]}
+          >
+            #
+          </Text>
+          <Text
+            style={[
+              styles.setCell,
+              styles.setHeaderCell,
+              styles.setPreviousCell,
+            ]}
+          >
+            Previous
+          </Text>
+          <Text
+            style={[styles.setCell, styles.setHeaderCell, styles.setWeightCell]}
+          >
+            kg
+          </Text>
+          <Text
+            style={[styles.setCell, styles.setHeaderCell, styles.setRepsCell]}
+          >
+            reps
+          </Text>
+          <Text
+            style={[styles.setCell, styles.setHeaderCell, styles.setCheckCell]}
+          ></Text>
         </View>
 
         {/* Set rows */}
@@ -326,9 +351,7 @@ export default function LiveExerciseCard({
 
             <View style={[styles.setCell, styles.setPreviousCell]}>
               <Text style={styles.previousText}>
-                {set.previousReps && set.previousWeight
-                  ? `${set.previousReps}×${set.previousWeight}`
-                  : '-'}
+                {formatPreviousPerformance(set.previousReps, set.previousWeight)}
               </Text>
             </View>
 
@@ -339,7 +362,7 @@ export default function LiveExerciseCard({
                 onChangeText={(value) =>
                   handleInputChange(setIndex, 'weight', value)
                 }
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor="#5eead4"
                 editable={isInWorkout && !set.completed}
@@ -353,7 +376,7 @@ export default function LiveExerciseCard({
                 onChangeText={(value) =>
                   handleInputChange(setIndex, 'reps', value)
                 }
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor="#5eead4"
                 editable={isInWorkout && !set.completed}
@@ -373,51 +396,39 @@ export default function LiveExerciseCard({
         ))}
       </View>
 
-      <View style={styles.setActions}>
-        <Pressable
-          style={styles.setActionButton}
-          onPress={() => onAddSet(exercise.id)}
-        >
-          <Plus size={16} color="#5eead4" />
-          <Text style={styles.setActionText}>Add Set</Text>
-        </Pressable>
-
-        {exercise.sets.length > 1 && (
+      <View style={styles.footerContainer}>
+        <View style={styles.setActions}>
           <Pressable
             style={styles.setActionButton}
-            onPress={() => onRemoveSet(exercise.id)}
+            onPress={() => onAddSet(exercise.id)}
           >
-            <CircleMinus size={16} color="#5eead4" />
-            <Text style={styles.setActionText}>Remove Set</Text>
+            <Plus size={16} color="#5eead4" />
+            <Text style={styles.setActionText}>Add Set</Text>
           </Pressable>
+
+          {exercise.sets.length > 1 && (
+            <Pressable
+              style={styles.setActionButton}
+              onPress={() => onRemoveSet(exercise.id)}
+            >
+              <CircleMinus size={16} color="#5eead4" />
+              <Text style={styles.setActionText}>Remove Set</Text>
+            </Pressable>
+          )}
+        </View>
+        
+        {onReorder && (
+          <GestureDetector gesture={dragGesture}>
+            <View style={styles.dragHandleContainer}>
+              <View style={styles.dragHandle}>
+                <GripVertical size={20} color="#5eead4" />
+              </View>
+            </View>
+          </GestureDetector>
         )}
       </View>
     </Animated.View>
   );
-
-  // Wrap the card in a GestureDetector only if it's draggable
-  if (onReorder) {
-    // Create a new component that limits dragging to only the drag handle
-    const DraggableWrapper = () => {
-      return (
-        <View>
-          {/* Full card without drag gesture */}
-          {card}
-          
-          {/* Overlay just for the drag handle area */}
-          <View style={styles.dragHandleOverlay}>
-            <GestureDetector gesture={dragGesture}>
-              <View style={styles.dragHandleGestureArea} />
-            </GestureDetector>
-          </View>
-        </View>
-      );
-    };
-    
-    return <DraggableWrapper />;
-  }
-
-  return card;
 }
 
 const styles = StyleSheet.create({
@@ -446,7 +457,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 16,
   },
   exerciseInfo: {
     flex: 1,
@@ -457,25 +468,22 @@ const styles = StyleSheet.create({
     color: '#ccfbf1',
     marginBottom: 4,
   },
-  exerciseDetail: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#5eead4',
-  },
-  headerRow: {
+  muscleChips: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
   },
-  headerContent: {
-    flexDirection: 'row',
-    flex: 1,
+  muscleChip: {
+    backgroundColor: '#0d3d56',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+  muscleChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#f0fdfa',
   },
   exerciseActions: {
     flexDirection: 'row',
@@ -485,18 +493,10 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 4,
   },
-  dragHandle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#0d3d56',
-    justifyContent: 'center',
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...Platform.select({
-      web: {
-        cursor: 'grab',
-      },
-    }),
+    marginBottom: 12,
   },
   setsContainer: {
     marginBottom: 16,
@@ -504,7 +504,6 @@ const styles = StyleSheet.create({
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 8,
     height: 44,
   },
@@ -515,7 +514,7 @@ const styles = StyleSheet.create({
   },
   setHeaderCell: {
     marginBottom: 8,
-    color: '#FFFFFF', // Changed to white for captions
+    color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
@@ -548,7 +547,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   captionText: {
-    color: '#FFFFFF', // Changed to white for set numbers
+    color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
@@ -579,9 +578,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#134e4a',
     color: '#14b8a6',
   },
-  setActions: {
+  footerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  setActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
   setActionButton: {
     flexDirection: 'row',
@@ -597,16 +601,21 @@ const styles = StyleSheet.create({
     color: '#5eead4',
     marginLeft: 8,
   },
-  dragHandleOverlay: {
-    position: 'absolute',
-    top: 16, // Adjust to match your padding
-    right: 16, // Adjust to match your padding
-    zIndex: 5000,
+  dragHandleContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dragHandleGestureArea: {
+  dragHandle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'transparent', // Invisible but draggable
+    backgroundColor: '#0d3d56',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      web: {
+        cursor: 'grab',
+      },
+    }),
   },
 });
