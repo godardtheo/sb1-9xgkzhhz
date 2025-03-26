@@ -18,19 +18,32 @@ type ProgramData = {
 export default function CurrentProgramCard() {
   const [programData, setProgramData] = useState<ProgramData>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [loadAttempts, setLoadAttempts] = useState(0);
   const router = useRouter();
 
   useEffect(() => {
     fetchProgramData();
-  }, []);
+    
+    // Component cleanup
+    return () => {
+      // Reset state on unmount to prevent stale data
+      setProgramData(null);
+      setLoading(false);
+      setError(null);
+    };
+  }, [loadAttempts]);
 
   const fetchProgramData = async () => {
     try {
       setLoading(true);
+      setError(null);
+
       const data = await getNextWorkout();
       setProgramData(data);
     } catch (error) {
       console.error('Error fetching program data:', error);
+      setError('Failed to load program data');
     } finally {
       setLoading(false);
     }
@@ -38,15 +51,28 @@ export default function CurrentProgramCard() {
 
   const handlePress = () => {
     if (programData?.nextWorkout) {
-      // Navigate to LiveWorkoutModal with the template ID
-      router.push({
-        pathname: '/modals/live-workout',
-        params: { template_id: programData.nextWorkout.template_id },
-      });
+      try {
+        // Navigate to LiveWorkoutModal with the template ID
+        router.push({
+          pathname: '/modals/live-workout',
+          params: { template_id: programData.nextWorkout.template_id },
+        });
+      } catch (error) {
+        console.error('Navigation error:', error);
+        // If navigation fails, retry after a short delay
+        setTimeout(() => {
+          router.push('/modals/live-workout?template_id=' + 
+            encodeURIComponent(programData.nextWorkout!.template_id));
+        }, 100);
+      }
     } else {
       // If no next workout, navigate to programs
       router.push('/modals/programs');
     }
+  };
+
+  const handleRetry = () => {
+    setLoadAttempts(prev => prev + 1);
   };
 
   if (loading) {
@@ -55,6 +81,22 @@ export default function CurrentProgramCard() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#14b8a6" />
           <Text style={styles.loadingText}>Loading program...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.textContent}>
+            <Text style={styles.errorTitle}>Error Loading Program</Text>
+            <Text style={styles.errorSubtitle}>{error}</Text>
+          </View>
+          <Pressable onPress={handleRetry} style={styles.retryButton}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -78,8 +120,8 @@ export default function CurrentProgramCard() {
   }
 
   return (
-    <Pressable style={styles.container} onPress={handlePress}>
-      <View style={styles.content}>
+    <View style={styles.container}>
+      <Pressable style={styles.content} onPress={handlePress}>
         <View style={styles.textContent}>
           <Text style={styles.title}>{programData.programName}</Text>
           <Text style={styles.subtitle}>
@@ -90,8 +132,8 @@ export default function CurrentProgramCard() {
           </Text>
         </View>
         <ChevronRight size={24} color="#5eead4" />
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 }
 
@@ -106,6 +148,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    minHeight: 90, // Ensure consistent height
   },
   content: {
     flexDirection: 'row',
@@ -150,4 +193,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
   },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#ef4444',
+    marginBottom: 4,
+  },
+  errorSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#5eead4',
+  },
+  retryButton: {
+    backgroundColor: '#115e59',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#14b8a6',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  }
 });

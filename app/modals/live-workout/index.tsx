@@ -224,8 +224,8 @@ export default function LiveWorkoutScreen() {
                     weight: '',
                     reps: '',
                     completed: false,
-                    previousWeight: prevSet.weight?.toString() || '0',
-                    previousReps: prevSet.reps?.toString() || '0',
+                    previousWeight: prevSet.weight || '0',
+                    previousReps: prevSet.reps || '0',
                   };
                 }),
               };
@@ -248,7 +248,6 @@ export default function LiveWorkoutScreen() {
       if (!userProfile?.id) return [];
 
       // Get the most recent workout where this exercise was performed
-      // Fix: Changed how we order by joined table column - separate order parameters
       const { data: workoutExercises, error: workoutError } = await supabase
         .from('workout_exercises')
         .select(`
@@ -258,7 +257,7 @@ export default function LiveWorkoutScreen() {
         `)
         .eq('exercise_id', exerciseId)
         .eq('workouts.user_id', userProfile.id)
-        .order('id', { ascending: false }) // Use a simpler order criterion
+        .order('id', { ascending: false }) // Simplified ordering
         .limit(1);
 
       if (workoutError || !workoutExercises || workoutExercises.length === 0) {
@@ -266,24 +265,25 @@ export default function LiveWorkoutScreen() {
         return [];
       }
 
-      try {
-        // Get the sets for this exercise in that workout
-        const { data: setData, error: setError } = await supabase
-          .from('sets')
-          .select('*')
-          .eq('workout_exercise_id', workoutExercises[0].id)
-          .order('set_order');
+      // Get the sets for this exercise in that workout
+      const { data: setData, error: setError } = await supabase
+        .from('sets')
+        .select('rep_count, weight, set_order')
+        .eq('workout_exercise_id', workoutExercises[0].id)
+        .order('set_order');
 
-        if (setError) {
-          console.log("Error fetching set data:", setError.message);
-          return [];
-        }
-
-        return setData || [];
-      } catch (innerError) {
-        console.error('Error in inner query:', innerError);
+      if (setError) {
+        console.log("Error fetching set data:", setError.message);
         return [];
       }
+
+      // Format the set data to include both rep_count and weight
+      return setData ? setData.map(set => ({
+        reps: set.rep_count.toString(),
+        weight: set.weight.toString(),
+        set_order: set.set_order
+      })) : [];
+      
     } catch (error) {
       console.error('Error fetching previous performance:', error);
       return [];
@@ -404,7 +404,7 @@ export default function LiveWorkoutScreen() {
             .filter((set) => set.completed)
             .map((set, setIndex) => ({
               workout_exercise_id: workoutExercise.id,
-              rep_count: parseInt(set.reps) || 0,
+              rep_count: parseFloat(set.reps) || 0, // Parse as float to support decimal reps
               weight: parseFloat(set.weight) || 0,
               completed_at: new Date().toISOString(),
               set_order: setIndex,
@@ -473,7 +473,7 @@ export default function LiveWorkoutScreen() {
       exercises.map((ex) => {
         if (ex.id === exerciseId) {
           const newSet = {
-            id: Date.now().toString(), // Use timestamp for client-side IDs
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 9), // Use unique ID
             weight: '',
             reps: '',
             completed: false,
@@ -633,6 +633,11 @@ export default function LiveWorkoutScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={true}
+          // Add passive flag to prevent scroll blocking warning
+          scrollEventThrottle={16}
+          keyboardShouldPersistTaps="handled"
+          // Make the scrolling event listener passive
+          onScroll={undefined}
         >
           {exercises.length === 0 ? (
             <View style={styles.emptyState}>
