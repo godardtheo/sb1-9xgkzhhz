@@ -1,3 +1,4 @@
+import React from 'react'; // Added React import to fix the "React is not defined" error
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { X, Volume2, VolumeX } from 'lucide-react-native';
 import { useState } from 'react';

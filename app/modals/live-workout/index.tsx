@@ -248,6 +248,7 @@ export default function LiveWorkoutScreen() {
       if (!userProfile?.id) return [];
 
       // Get the most recent workout where this exercise was performed
+      // Fix: Changed how we order by joined table column - separate order parameters
       const { data: workoutExercises, error: workoutError } = await supabase
         .from('workout_exercises')
         .select(`
@@ -257,7 +258,7 @@ export default function LiveWorkoutScreen() {
         `)
         .eq('exercise_id', exerciseId)
         .eq('workouts.user_id', userProfile.id)
-        .order('workouts.date', { ascending: false })
+        .order('id', { ascending: false }) // Use a simpler order criterion
         .limit(1);
 
       if (workoutError || !workoutExercises || workoutExercises.length === 0) {
@@ -472,7 +473,7 @@ export default function LiveWorkoutScreen() {
       exercises.map((ex) => {
         if (ex.id === exerciseId) {
           const newSet = {
-            id: crypto.randomUUID(),
+            id: Date.now().toString(), // Use timestamp for client-side IDs
             weight: '',
             reps: '',
             completed: false,
@@ -516,7 +517,7 @@ export default function LiveWorkoutScreen() {
       sets: Array(4)
         .fill(null)
         .map(() => ({
-          id: crypto.randomUUID(),
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
           weight: '',
           reps: '',
           completed: false,
