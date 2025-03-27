@@ -19,13 +19,11 @@ export default function NewWorkoutCard({ onPress }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: '#0d3d56',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

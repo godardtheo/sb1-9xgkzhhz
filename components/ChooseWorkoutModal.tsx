@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, Modal, Pressable, Platform, FlatList, ActivityIndicator } from 'react-native';
-import { X, ChevronRight, Dumbbell, List, Play } from 'lucide-react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Platform, FlatList, ActivityIndicator, TextInput, ScrollView } from 'react-native';
+import { X, ChevronRight, Dumbbell, PlusCircle, Play, Search, ArrowLeft } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, SlideInUp, SlideOutDown } from 'react-native-reanimated';
@@ -31,28 +31,45 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
     nextWorkout: { id: string; name: string; template_id: string } | null;
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
   const [loadingNextWorkout, setLoadingNextWorkout] = useState(false);
+
+  const muscleGroups = [
+    'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
+  ];
 
   // Fetch next workout from active program
   useEffect(() => {
     if (visible) {
       fetchNextWorkout();
       fetchWorkouts();
+    } else {
+      // Reset UI state when modal closes
+      setShowWorkoutsList(false);
+      setSearchQuery('');
+      setSelectedMuscle('');
     }
   }, [visible]);
 
-  // Filter workouts based on search
+  // Filter workouts based on search and selected muscle
   useEffect(() => {
+    let filtered = [...workouts];
+
     if (searchQuery) {
-      const filtered = workouts.filter(workout => 
+      filtered = filtered.filter(workout => 
         workout.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
-      setFilteredWorkouts(filtered);
-    } else {
-      setFilteredWorkouts(workouts);
     }
-  }, [searchQuery, workouts]);
+
+    if (selectedMuscle) {
+      filtered = filtered.filter(workout => 
+        workout.muscles?.includes(selectedMuscle)
+      );
+    }
+
+    setFilteredWorkouts(filtered);
+  }, [searchQuery, selectedMuscle, workouts]);
 
   const fetchNextWorkout = async () => {
     try {
@@ -132,6 +149,14 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
     onClose();
   };
 
+  const handleMuscleSelect = (muscle: string) => {
+    setSelectedMuscle(muscle === selectedMuscle ? '' : muscle);
+  };
+
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
   // Main options screen content
   const renderMainOptions = () => (
     <>
@@ -185,13 +210,13 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
           <ChevronRight size={20} color="#5eead4" />
         </Pressable>
 
-        {/* From Scratch option */}
+        {/* From Scratch option - Icon updated to PlusCircle */}
         <Pressable 
           style={styles.optionCard}
           onPress={handleStartFromScratch}
         >
           <View style={styles.optionIconContainer}>
-            <List size={24} color="#042f2e" />
+            <PlusCircle size={24} color="#042f2e" />
           </View>
           <View style={styles.optionInfo}>
             <Text style={styles.optionTitle}>From scratch</Text>
@@ -212,7 +237,7 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
           style={styles.backButton}
           hitSlop={8}
         >
-          <ChevronRight size={24} color="#5eead4" style={{ transform: [{ rotate: '180deg' }] }} />
+          <ArrowLeft size={24} color="#5eead4" />
         </Pressable>
         <Text style={styles.title}>My Workouts</Text>
         <Pressable 
@@ -223,6 +248,42 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
           <X size={24} color="#5eead4" />
         </Pressable>
       </View>
+
+      <View style={styles.searchContainer}>
+        <Search size={20} color="#5eead4" />
+        <TextInput
+          style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
+          placeholder="Search workouts..."
+          placeholderTextColor="#5eead4"
+          value={searchQuery}
+          onChangeText={handleSearch}
+        />
+      </View>
+
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.muscleGroupsScroll}
+        contentContainerStyle={styles.muscleGroupsContent}
+      >
+        {muscleGroups.map((muscle) => (
+          <Pressable
+            key={muscle}
+            style={[
+              styles.muscleGroupButton,
+              selectedMuscle === muscle && styles.selectedMuscleGroup
+            ]}
+            onPress={() => handleMuscleSelect(muscle)}
+          >
+            <Text style={[
+              styles.muscleGroupText,
+              selectedMuscle === muscle && styles.selectedMuscleGroupText
+            ]}>
+              {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -392,6 +453,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#115e59',
+    margin: 16,
+    borderRadius: 12,
+    padding: 12,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#ccfbf1',
+    marginLeft: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    height: Platform.OS === 'web' ? 24 : 'auto',
+    padding: 0,
+  },
+  searchInputWeb: {
+    outlineStyle: 'none',
+  },
+  muscleGroupsScroll: {
+    maxHeight: 40,
+  },
+  muscleGroupsContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  muscleGroupButton: {
+    backgroundColor: '#115e59',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  selectedMuscleGroup: {
+    backgroundColor: '#14b8a6',
+  },
+  muscleGroupText: {
+    color: '#5eead4',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  selectedMuscleGroupText: {
+    color: '#042f2e',
   },
   workoutsList: {
     padding: 16,
