@@ -1,36 +1,29 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Dumbbell } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 
-export default function NewWorkoutCard() {
-  const router = useRouter();
+type Props = {
+  onPress: () => void;
+};
 
-  const handlePress = () => {
-    // TODO: Navigate to ChooseWorkoutModal when implemented
-    // For now, navigate to the existing new workout screen
-    router.push('/modals/workouts/new');
-  };
-
+export default function NewWorkoutCard({ onPress }: Props) {
   return (
-    <Pressable style={styles.container} onPress={handlePress}>
+    <Pressable style={styles.container} onPress={onPress}>
       <View style={styles.iconContainer}>
         <Dumbbell size={24} color="#042f2e" />
       </View>
-      <Text style={styles.text}>New Workout</Text>
+      <Text style={styles.text}>Start Workout</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: '#0d3d56',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
