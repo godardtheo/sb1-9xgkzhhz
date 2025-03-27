@@ -38,18 +38,24 @@ export default function HomeScreen() {
         </View>
 
         {/* Current Program Card */}
-        <CurrentProgramCard />
+        <View style={styles.cardWrapper}>
+          <CurrentProgramCard />
+        </View>
 
         {/* History Card */}
-        <HistoryHomeCard />
+        <View style={styles.cardWrapper}>
+          <HistoryHomeCard />
+        </View>
 
-        {/* Quick Actions Row */}
+        {/* Quick Actions - Cards side by side taking full width */}
         <View style={styles.quickActions}>
-          <NewWorkoutCard onPress={() => setShowWorkoutModal(true)} />
-          <LogWeightCard />
-          
-          {/* Additional whitespace filler to maintain grid layout */}
-          <View style={styles.spacerCard} />
+          <View style={[styles.cardContainer]}>
+            <NewWorkoutCard onPress={() => setShowWorkoutModal(true)} />
+          </View>
+          <View style={styles.spacer} />
+          <View style={[styles.cardContainer]}>
+            <LogWeightCard />
+          </View>
         </View>
       </ScrollView>
 
@@ -71,12 +77,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollViewContent: {
-    padding: 16,
-    paddingTop: 60,
+    paddingVertical: 60,
     paddingBottom: 100,
+    gap: 4, // Consistent vertical spacing between elements
   },
   header: {
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    marginBottom: 32,
   },
   greetingContainer: {
     flexDirection: 'row',
@@ -92,13 +99,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#ccfbf1',
   },
+  cardWrapper: {
+    paddingHorizontal: 16,
+  },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 16,
   },
-  spacerCard: {
+  cardContainer: {
     flex: 1,
-    marginLeft: 8,
+  },
+  spacer: {
+    width: 16, // Same as the vertical gap between elements
   },
 });
