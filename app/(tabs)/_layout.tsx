@@ -1,63 +1,72 @@
 import { Tabs } from 'expo-router';
 import { Chrome as Dashboard, ChartBar as Statistics, CircleUser as UserProfile, Plus } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
+import ResumeTrainingButton from '@/components/ResumeTrainingButton';
+import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
 
 export default function TabLayout() {
+  const isWorkoutInProgress = useWorkoutProgressStore(state => state.isWorkoutInProgress);
+
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarBackground: () => (
-          <View style={[StyleSheet.absoluteFill, styles.tabBarBackground]} />
-        ),
-        tabBarShowLabel: false,
-        tabBarActiveTintColor: '#14b8a6',
-        tabBarInactiveTintColor: '#5eead4',
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.iconContainer}>
-              <Dashboard size={24} color={color} strokeWidth={2.5} />
-            </View>
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarBackground: () => (
+            <View style={[StyleSheet.absoluteFill, styles.tabBarBackground]} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="statistics"
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.iconContainer}>
-              <Statistics size={24} color={color} strokeWidth={2.5} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <View style={styles.iconContainer}>
-              <UserProfile size={24} color={color} strokeWidth={2.5} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="action"
-        options={{
-          tabBarIcon: () => (
-            <View style={styles.iconContainer}>
-              <View style={styles.actionButton}>
-                <Plus size={22} color="#021a19" strokeWidth={3} />
+          tabBarShowLabel: false,
+          tabBarActiveTintColor: '#14b8a6',
+          tabBarInactiveTintColor: '#5eead4',
+        }}>
+        <Tabs.Screen
+          name="index"
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <View style={styles.iconContainer}>
+                <Dashboard size={24} color={color} strokeWidth={2.5} />
               </View>
-            </View>
-          ),
-        }}
-      />
-    </Tabs>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="statistics"
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <View style={styles.iconContainer}>
+                <Statistics size={24} color={color} strokeWidth={2.5} />
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <View style={styles.iconContainer}>
+                <UserProfile size={24} color={color} strokeWidth={2.5} />
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="action"
+          options={{
+            tabBarIcon: () => (
+              <View style={styles.iconContainer}>
+                <View style={styles.actionButton}>
+                  <Plus size={22} color="#021a19" strokeWidth={3} />
+                </View>
+              </View>
+            ),
+          }}
+        />
+      </Tabs>
+      
+      {/* Show the Resume Training Button when a workout is in progress */}
+      {isWorkoutInProgress && <ResumeTrainingButton />}
+    </View>
   );
 }
 

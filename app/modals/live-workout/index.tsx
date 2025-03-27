@@ -28,6 +28,7 @@ import WorkoutNameModal from '@/components/WorkoutNameModal';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import RestTimerModal from '@/components/RestTimerModal';
 import { Audio } from 'expo-av';
+import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
 
 type Exercise = {
   id: string;
@@ -53,6 +54,9 @@ export default function LiveWorkoutScreen() {
   const { template_id } = useLocalSearchParams();
   const { userProfile } = useAuthStore();
 
+  // Get global workout state
+  const workoutProgress = useWorkoutProgressStore();
+  
   // Workout state
   const [workoutName, setWorkoutName] = useState('New Workout');
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -61,9 +65,11 @@ export default function LiveWorkoutScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Display duration - this will be updated from the global timer
+  const [displayDuration, setDisplayDuration] = useState(0);
 
   // Timers
-  const [workoutDuration, setWorkoutDuration] = useState(0); // in seconds
   const [restTime, setRestTime] = useState(120); // default 2 minutes in seconds
   const [activeRestTime, setActiveRestTime] = useState(0);
   const [isRestTimerActive, setIsRestTimerActive] = useState(false);
@@ -85,16 +91,36 @@ export default function LiveWorkoutScreen() {
   );
 
   // References
-  const workoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const displayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   // Animated values
   const progressValue = useSharedValue(0);
 
+  // Check if resuming a workout
   useEffect(() => {
-    // Initialize workout
-    if (template_id) {
+    if (workoutProgress.isWorkoutInProgress) {
+      // If we're returning to the live workout screen and a workout is in progress,
+      // restore the state from the global store
+      setWorkoutName(workoutProgress.workoutName);
+      setExercises(workoutProgress.exercises);
+      setRestTime(workoutProgress.restTime);
+      setActiveRestTime(workoutProgress.activeRestTime);
+      setIsRestTimerActive(workoutProgress.isRestTimerActive);
+      setIsWorkoutStarted(true);
+      setLoading(false);
+      
+      // Start the display timer to show current workout duration
+      startDisplayTimer();
+      
+      // If rest timer was active, resume it
+      if (workoutProgress.isRestTimerActive && workoutProgress.activeRestTime > 0) {
+        resumeRestTimer(workoutProgress.activeRestTime);
+      }
+    } 
+    // Normal initialization for a new workout
+    else if (template_id) {
       loadWorkoutTemplate(template_id as string);
     } else {
       setLoading(false);
@@ -105,13 +131,34 @@ export default function LiveWorkoutScreen() {
 
     // Cleanup timers and sound on unmount
     return () => {
-      if (workoutTimerRef.current) clearInterval(workoutTimerRef.current);
+      if (displayTimerRef.current) clearInterval(displayTimerRef.current);
       if (restTimerRef.current) clearInterval(restTimerRef.current);
       
       // Unload sound
       sound?.unloadAsync();
     };
-  }, [template_id]);
+  }, [template_id, workoutProgress.isWorkoutInProgress]);
+
+  // Update the global store whenever workout state changes
+  useEffect(() => {
+    if (isWorkoutStarted) {
+      workoutProgress.updateWorkout({
+        workoutName,
+        restTime,
+        activeRestTime,
+        isRestTimerActive,
+      });
+      
+      workoutProgress.updateExercises(exercises);
+    }
+  }, [
+    isWorkoutStarted,
+    workoutName,
+    exercises,
+    restTime,
+    activeRestTime,
+    isRestTimerActive,
+  ]);
 
   // Load alarm sound
   const loadSound = async () => {
@@ -151,6 +198,19 @@ export default function LiveWorkoutScreen() {
     const progress = totalSets > 0 ? completedSets / totalSets : 0;
     progressValue.value = withTiming(progress, { duration: 300 });
   }, [exercises]);
+
+  // Start the display timer to continuously update from the global store
+  const startDisplayTimer = () => {
+    if (displayTimerRef.current) clearInterval(displayTimerRef.current);
+    
+    // Update immediately
+    setDisplayDuration(workoutProgress.getCurrentDuration());
+    
+    // Then update every second
+    displayTimerRef.current = setInterval(() => {
+      setDisplayDuration(workoutProgress.getCurrentDuration());
+    }, 1000);
+  };
 
   const loadWorkoutTemplate = async (templateId: string) => {
     try {
@@ -301,16 +361,13 @@ export default function LiveWorkoutScreen() {
     } else {
       // Start workout and timer
       setIsWorkoutStarted(true);
-      startWorkoutTimer();
+      
+      // Start display timer to update UI
+      startDisplayTimer();
+      
+      // Save to global store
+      workoutProgress.startWorkout(workoutName, template_id as string || null, exercises);
     }
-  };
-
-  const startWorkoutTimer = () => {
-    if (workoutTimerRef.current) clearInterval(workoutTimerRef.current);
-
-    workoutTimerRef.current = setInterval(() => {
-      setWorkoutDuration((prev) => prev + 1);
-    }, 1000);
   };
 
   const startRestTimer = () => {
@@ -320,6 +377,28 @@ export default function LiveWorkoutScreen() {
     setIsRestTimerActive(true);
     setIsTimerDone(false);
 
+    restTimerRef.current = setInterval(() => {
+      setActiveRestTime((prev) => {
+        if (prev <= 1) {
+          // Timer completed
+          clearInterval(restTimerRef.current!);
+          setIsTimerDone(true);
+          // Play sound when timer completes
+          playAlarmSound();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+  
+  const resumeRestTimer = (timeRemaining: number) => {
+    if (restTimerRef.current) clearInterval(restTimerRef.current);
+    
+    setActiveRestTime(timeRemaining);
+    setIsRestTimerActive(true);
+    setIsTimerDone(false);
+    
     restTimerRef.current = setInterval(() => {
       setActiveRestTime((prev) => {
         if (prev <= 1) {
@@ -358,7 +437,7 @@ export default function LiveWorkoutScreen() {
       setIsSaving(true);
 
       // Stop timers
-      if (workoutTimerRef.current) clearInterval(workoutTimerRef.current);
+      if (displayTimerRef.current) clearInterval(displayTimerRef.current);
       if (restTimerRef.current) clearInterval(restTimerRef.current);
 
       const {
@@ -373,7 +452,7 @@ export default function LiveWorkoutScreen() {
           user_id: user.id,
           name: workoutName,
           date: new Date().toISOString(),
-          duration: `${Math.floor(workoutDuration / 60)} minutes`,
+          duration: `${Math.floor(displayDuration / 60)} minutes`,
           notes: '',
         })
         .select()
@@ -421,6 +500,9 @@ export default function LiveWorkoutScreen() {
       }
 
       setIsWorkoutFinished(true);
+      // End the workout in global state
+      workoutProgress.endWorkout();
+      
       // Close modal and redirect to home screen
       setShowFinishModal(false);
       router.replace('/(tabs)');
@@ -434,8 +516,11 @@ export default function LiveWorkoutScreen() {
 
   const discardWorkout = () => {
     // Stop timers
-    if (workoutTimerRef.current) clearInterval(workoutTimerRef.current);
+    if (displayTimerRef.current) clearInterval(displayTimerRef.current);
     if (restTimerRef.current) clearInterval(restTimerRef.current);
+    
+    // End workout in global state
+    workoutProgress.endWorkout();
 
     // Navigate back
     router.replace('/(tabs)');
@@ -561,6 +646,11 @@ export default function LiveWorkoutScreen() {
     reordered.splice(toIndex, 0, removed);
     setExercises(reordered);
   };
+  
+  // Handle back button - just go back without confirmation
+  const handleBackPress = () => {
+    router.back();
+  };
 
   const formatTime = (timeInSeconds: number) => {
     // Format as M:SS (no hours)
@@ -601,16 +691,14 @@ export default function LiveWorkoutScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Pressable
-            onPress={() =>
-              isWorkoutStarted ? setShowDiscardModal(true) : router.back()
-            }
+            onPress={handleBackPress}
             style={styles.backButton}
             hitSlop={8}
           >
             <ArrowLeft size={24} color="#5eead4" />
           </Pressable>
 
-          <Text style={styles.timerText}>{formatWorkoutTime(workoutDuration)}</Text>
+          <Text style={styles.timerText}>{formatWorkoutTime(displayDuration)}</Text>
 
           <Pressable
             style={[
