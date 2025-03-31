@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
@@ -10,7 +10,19 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   
-  const { signUp, loading } = useAuthStore();
+  const { signUp, loading, session } = useAuthStore();
+
+  // Handle session changes to redirect when authenticated
+  useEffect(() => {
+    // If we have a session and we're still on the signup page, redirect to home
+    if (session) {
+      console.log("Signup: Session detected, redirecting to home");
+      // Use a small timeout to ensure navigation happens after render
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 100);
+    }
+  }, [session, router]);
 
   const handleSignup = async () => {
     try {
@@ -27,7 +39,7 @@ export default function SignupScreen() {
       }
       
       await signUp(email, password);
-      router.replace('/(tabs)');
+      // Navigation happens in useEffect when session updates
     } catch (err: any) {
       console.error('Signup error:', err);
       setError(err.message || 'Failed to create account');
