@@ -1,16 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
-import { useRouter, Link } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
 import { Mail, Lock, ArrowRight } from 'lucide-react-native';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const segments = useSegments();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   
-  const { signIn, loading } = useAuthStore();
+  // Destructure what we need from auth store
+  const { signIn, loading, session } = useAuthStore();
+
+  // Handle session changes to redirect when authenticated
+  useEffect(() => {
+    // If we have a session and we're still on the login page, redirect to home
+    if (session) {
+      console.log("Login: Session detected, redirecting to home");
+      // Use a small timeout to ensure navigation happens after render
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 100);
+    }
+  }, [session, router]);
 
   const handleLogin = async () => {
     try {
@@ -28,9 +42,10 @@ export default function LoginScreen() {
       
       console.log('Signing in with:', email);
       await signIn(email, password);
-      console.log('Sign in successful');
       
-      router.replace('/(tabs)');
+      // Note: We don't need to navigate here, the useEffect will handle that
+      // when the session state updates
+      console.log('Sign in successful');
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Failed to sign in');
@@ -105,6 +120,8 @@ export default function LoginScreen() {
     </View>
   );
 }
+
+import { Link } from 'expo-router';
 
 const styles = StyleSheet.create({
   container: {
