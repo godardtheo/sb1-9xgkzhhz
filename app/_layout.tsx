@@ -18,6 +18,7 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [appState, setAppState] = useState(AppState.currentState);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -33,22 +34,38 @@ export default function RootLayout() {
 
   // Handle navigation based on auth state
   useEffect(() => {
-    if (!initialized) return;
+    if (!initialized || isNavigating) return;
     
     const inAuthGroup = segments[0] === '(auth)';
+    const shouldRedirectToHome = session && inAuthGroup;
+    const shouldRedirectToLogin = !session && !inAuthGroup;
     
-    // If user is authenticated but on auth screen, redirect to home
-    if (session && inAuthGroup) {
-      console.log('Layout: User is authenticated but on auth screen, redirecting to home');
-      router.replace('/(tabs)');
-    }
+    // Don't navigate if we're already on the correct screen
+    if (!shouldRedirectToHome && !shouldRedirectToLogin) return;
     
-    // If user is not authenticated and not on auth screen, redirect to login
-    if (!session && !inAuthGroup) {
-      console.log('Layout: User is not authenticated and not on auth screen, redirecting to login');
-      router.replace('/login');
-    }
-  }, [session, initialized, segments, router]);
+    // Set navigating state to prevent navigation loops
+    setIsNavigating(true);
+    
+    // Use setTimeout to ensure state updates happen before navigation
+    setTimeout(() => {
+      try {
+        if (shouldRedirectToHome) {
+          console.log('Layout: User is authenticated but on auth screen, redirecting to home');
+          router.replace('/(tabs)');
+        } else if (shouldRedirectToLogin) {
+          console.log('Layout: User is not authenticated and not on auth screen, redirecting to login');
+          router.replace('/login');
+        }
+      } catch (error) {
+        console.error('Navigation error:', error);
+      } finally {
+        // Reset navigation state after a delay to allow navigation to complete
+        setTimeout(() => {
+          setIsNavigating(false);
+        }, 500);
+      }
+    }, 0);
+  }, [session, initialized, segments, router, isNavigating]);
 
   // Handle app state changes
   useEffect(() => {
@@ -63,13 +80,6 @@ export default function RootLayout() {
         if (session) {
           refreshSession().catch(err => {
             console.warn('Failed to refresh session on foreground:', err);
-            
-            // If refresh fails and we're not on the auth screen, redirect to login
-            const inAuthGroup = segments[0] === '(auth)';
-            if (!inAuthGroup) {
-              console.log('Session refresh failed, redirecting to login');
-              router.replace('/login');
-            }
           });
         }
       }
@@ -80,7 +90,7 @@ export default function RootLayout() {
     return () => {
       subscription.remove();
     };
-  }, [appState, session, refreshSession, segments, router]);
+  }, [appState, session, refreshSession]);
 
   // For Bolt.new framework support
   useEffect(() => {
@@ -90,7 +100,7 @@ export default function RootLayout() {
   }, []);
 
   // Show loading screen while fonts are loading or auth is initializing
-  if (!fontsLoaded || !initialized || loading) {
+  if (!fontsLoaded || !initialized) {
     return (
       <View
         style={{
