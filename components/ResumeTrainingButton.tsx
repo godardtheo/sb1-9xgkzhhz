@@ -1,109 +1,131 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
-import { X } from 'lucide-react-native';
+import React from 'react';
+import { StyleSheet, Text, Pressable, Animated, View, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import ConfirmationModal from './ConfirmationModal';
+import { PlayCircle } from 'lucide-react-native';
 import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
+import { useEffect, useRef } from 'react';
 
 export default function ResumeTrainingButton() {
   const router = useRouter();
-  const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const { workoutName, getCurrentDuration } = useWorkoutProgressStore();
   
-  const { workoutName, endWorkout, templateId } = useWorkoutProgressStore(state => ({
-    workoutName: state.workoutName,
-    endWorkout: state.endWorkout,
-    templateId: state.templateId
-  }));
-
-  const handleResume = () => {
-    // Navigate back to the live workout screen
-    // Pass the template_id if available to ensure the correct workout is loaded
-    router.push({
-      pathname: '/modals/live-workout',
-      params: templateId ? { template_id: templateId } : {}
-    });
+  // Animation values
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  // Start pulse animation when component mounts
+  useEffect(() => {
+    // Fade in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
+    // Create pulsing animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    
+    // Cleanup animation on unmount
+    return () => {
+      pulseAnim.stopAnimation();
+    };
+  }, []);
+  
+  // Format the current duration for display (MM:SS)
+  const formatTime = () => {
+    const duration = getCurrentDuration();
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
   
-  const handleDiscard = () => {
-    endWorkout();
-    setShowDiscardModal(false);
+  const handlePress = () => {
+    router.push('/modals/live-workout');
   };
-
+  
   return (
-    <>
-      <View style={styles.container}>
-        <View style={styles.buttonContainer}>
-          <Pressable
-            style={styles.discardButton}
-            onPress={() => setShowDiscardModal(true)}
-          >
-            <X size={20} color="#ffffff" />
-          </Pressable>
-          <Pressable style={styles.resumeButton} onPress={handleResume}>
-            <Text style={styles.resumeButtonText}>Resume workout</Text>
-          </Pressable>
+    <Animated.View 
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: pulseAnim }],
+        }
+      ]}
+    >
+      <Pressable 
+        style={styles.button}
+        onPress={handlePress}
+        android_ripple={{ color: 'rgba(255,255,255,0.2)', borderless: false }}
+      >
+        <PlayCircle size={24} color="#042f2e" />
+        <View style={styles.textContainer}>
+          <Text style={styles.actionText}>Resume Workout</Text>
+          <Text style={styles.infoText}>{workoutName} • {formatTime()}</Text>
         </View>
-      </View>
-
-      <ConfirmationModal
-        visible={showDiscardModal}
-        onClose={() => setShowDiscardModal(false)}
-        onConfirm={handleDiscard}
-        title="Discard Workout"
-        message="Are you sure you want to discard this workout? All progress will be lost."
-        confirmText="Discard"
-        confirmColor="#ef4444"
-      />
-    </>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 80, // Positioned higher to avoid overlapping with the tab bar
+    bottom: 80, // Position above the tab bar
+    left: 16,
     right: 16,
-    zIndex: 100, // High enough to be above content but below modals
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    borderRadius: 24,
+    backgroundColor: '#14b8a6',
+    borderRadius: 12,
     overflow: 'hidden',
-    width: 220, // Slightly wider to ensure text fits
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 8,
     ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+      },
+      android: {
+        elevation: 5,
+      },
       web: {
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
       },
     }),
   },
-  discardButton: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
+  button: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: '20%', // 1/4 as specified
+    padding: 16,
   },
-  resumeButton: {
-    backgroundColor: '#14b8a6',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '80%', // 3/4 as specified
+  textContainer: {
+    marginLeft: 12,
+    flex: 1,
   },
-  resumeButtonText: {
-    fontSize: 16, // Reduced from 16 to ensure single line
+  actionText: {
+    color: '#042f2e',
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#ccfbf1',
-    textAlign: 'center',
+  },
+  infoText: {
+    color: '#042f2e',
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    opacity: 0.8,
   },
 });
