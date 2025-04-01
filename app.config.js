@@ -29,7 +29,7 @@ module.exports = {
       output: "static",
       favicon: "./assets/images/favicon.png"
     },
-    plugins: ["expo-router"],
+    plugins: ["expo-router", "expo-font", "expo-blur"],
     experiments: {
       typedRoutes: true,
       tsconfigPaths: true
