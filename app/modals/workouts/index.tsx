@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Platform, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Search, ArrowLeft, X, Plus, ChevronRight } from 'lucide-react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useWorkoutStore } from '@/lib/store/workoutStore';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type Workout = {
   id: string;
@@ -124,7 +125,7 @@ export default function WorkoutsScreen() {
                   <Text style={styles.workoutName}>{workout.name}</Text>
                   <View style={styles.workoutDetails}>
                     <Text style={styles.workoutStats}>
-                      {workout.exercise_count} exercises  •  {workout.set_count} sets  •  {workout.estimated_duration}
+                      {workout.exercise_count} exercises  •  {workout.set_count} sets  •  {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
                     </Text>
                   </View>
                   <View style={styles.muscleChips}>

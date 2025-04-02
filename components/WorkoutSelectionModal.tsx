@@ -3,6 +3,7 @@ import { Search, X, Check } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type Workout = {
   id: string;
@@ -258,7 +259,7 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
                             </Text>
                             <View style={styles.workoutStats}>
                               <Text style={styles.workoutStatsText}>
-                                {workout.exercise_count || 0} exercises • {workout.set_count || 0} sets • {workout.estimated_duration}
+                                {workout.exercise_count || 0} exercises • {workout.set_count || 0} sets • {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
                               </Text>
                             </View>
                             <View style={styles.muscleTags}>

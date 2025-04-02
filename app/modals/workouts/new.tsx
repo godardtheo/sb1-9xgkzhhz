@@ -11,6 +11,7 @@ import { useWorkoutStore } from '@/lib/store/workoutStore';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useExerciseReorder } from '@/hooks/useExerciseReorder';
 import DraggableExerciseCard from '@/components/DraggableExerciseCard';
+import { formatDuration } from '@/lib/utils/formatDuration';
 
 type Exercise = {
   id: string;
@@ -62,7 +63,8 @@ export default function NewWorkoutScreen() {
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
-  const estimatedDuration = exercises.length * 4 + totalSets * 2;
+  const estimatedDuration = 5 + (exercises.length * 4) + (totalSets * 3);
+  const formattedDuration = formatDuration(estimatedDuration);
 
   const handleAddExercise = (selectedExercises: Exercise[]) => {
     const newExercises = selectedExercises.map(exercise => ({
@@ -96,7 +98,7 @@ export default function NewWorkoutScreen() {
           name: name || 'New Workout',
           description,
           muscles: [...new Set(exercises.map(ex => ex.muscle))],
-          estimated_duration: `${estimatedDuration} minutes`
+          estimated_duration: formattedDuration
         })
         .select()
         .single();
@@ -257,8 +259,8 @@ export default function NewWorkoutScreen() {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{estimatedDuration}</Text>
-              <Text style={styles.statLabel}>minutes</Text>
+              <Text style={styles.statValue}>{formattedDuration}</Text>
+              <Text style={styles.statLabel}>duration</Text>
             </View>
           </View>
 

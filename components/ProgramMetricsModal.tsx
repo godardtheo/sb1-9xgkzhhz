@@ -8,7 +8,7 @@ type Props = {
   metrics: {
     workouts: number;
     sets: number;
-    duration: number;
+    duration: string;
   };
 };
 
@@ -68,7 +68,7 @@ export default function ProgramMetricsModal({ visible, onClose, metrics }: Props
                     <Timer size={24} color="#042f2e" />
                   </View>
                   <Text style={styles.metricValue}>{metrics.duration}</Text>
-                  <Text style={styles.metricLabel}>Minutes</Text>
+                  <Text style={styles.metricLabel}>Duration</Text>
                   <Text style={styles.metricDescription}>
                     Estimated total duration of the program
                   </Text>

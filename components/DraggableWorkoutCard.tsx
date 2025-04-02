@@ -11,6 +11,7 @@ import Animated, {
 import { Trash2, GripVertical, Info, ChevronRight } from 'lucide-react-native';
 import { useRef, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type Workout = {
   id: string;
@@ -131,6 +132,20 @@ export default function DraggableWorkoutCard({
         } else if (setCountResult !== null) {
           console.log(`Found ${setCountResult} sets for workout ${workout.name}`);
           setSetCount(setCountResult);
+
+          // Get the template workout to check for updated duration
+          const { data: templateData, error: templateError } = await supabase
+            .from('workout_templates')
+            .select('estimated_duration')
+            .eq('id', templateId)
+            .single();
+            
+          if (templateError) {
+            console.error('Error fetching template duration:', templateError);
+          } else if (templateData && templateData.estimated_duration) {
+            // If the template has been updated with new duration format, use it directly
+            console.log(`Got estimated duration from template: ${templateData.estimated_duration}`);
+          }
         }
       } else {
         console.log(`No exercise IDs found for workout ${workout.name}`);
@@ -298,7 +313,7 @@ export default function DraggableWorkoutCard({
             <Text style={styles.workoutName}>{workout.name}</Text>
             <View style={styles.workoutDetails}>
               <Text style={styles.workoutStats}>
-                {exerciseCount} exercises • {setCount} sets • {workout.estimated_duration}
+                {exerciseCount} exercises • {setCount} sets • {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
               </Text>
             </View>
           </View>

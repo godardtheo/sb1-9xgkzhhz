@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeIn, SlideInUp, SlideOutDown } from 'react-native-reanimated';
 import { getNextWorkout } from '@/lib/workoutUtils';
 import { supabase } from '@/lib/supabase';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type Workout = {
   id: string;
@@ -307,7 +308,7 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
               <View style={styles.workoutInfo}>
                 <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.workoutStats}>
-                  {item.exercise_count || 0} exercises • {item.set_count || 0} sets • {item.estimated_duration}
+                  {item.exercise_count || 0} exercises • {item.set_count || 0} sets • {formatDuration(parseDurationToMinutes(item.estimated_duration))}
                 </Text>
                 {item.muscles && item.muscles.length > 0 && (
                   <View style={styles.muscleChips}>

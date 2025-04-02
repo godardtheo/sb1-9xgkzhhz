@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { X } from 'lucide-react-native';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import NonDraggableExerciseCard from './NonDraggableExerciseCard';
 import { supabase } from '@/lib/supabase';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type Exercise = {
   id: string;
@@ -194,7 +195,7 @@ export default function WorkoutDetailsModal({ visible, onClose, workout, isInPro
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{displayWorkout.estimated_duration}</Text>
+                  <Text style={styles.statValue}>{formatDuration(parseDurationToMinutes(displayWorkout.estimated_duration))}</Text>
                   <Text style={styles.statLabel}>duration</Text>
                 </View>
               </View>

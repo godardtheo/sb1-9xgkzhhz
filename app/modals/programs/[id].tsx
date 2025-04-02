@@ -11,6 +11,7 @@ import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type Workout = {
   id: string;             // This is the program_workout id
@@ -66,10 +67,10 @@ export default function EditProgramScreen() {
 
   const totalWorkouts = workouts.length;
   const totalSets = workouts.reduce((acc, workout) => acc + (workout.set_count || 0), 0);
-  const estimatedDuration = workouts.reduce((acc, workout) => {
-    const duration = parseInt(workout.estimated_duration) || 0;
-    return acc + duration;
+  const totalMinutes = workouts.reduce((acc, workout) => {
+    return acc + parseDurationToMinutes(workout.estimated_duration);
   }, 0);
+  const formattedDuration = formatDuration(totalMinutes);
 
   // Check if there's an active program on toggle
   const handleActiveToggle = (value: boolean) => {
@@ -429,6 +430,13 @@ export default function EditProgramScreen() {
             <Text style={styles.statValue}>{totalSets}</Text>
             <Text style={styles.statLabel}>sets</Text>
           </View>
+
+          <View style={styles.statDivider} />
+
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{formattedDuration}</Text>
+            <Text style={styles.statLabel}>duration</Text>
+          </View>
         </View>
 
         <Pressable 
@@ -504,7 +512,7 @@ export default function EditProgramScreen() {
         metrics={{
           workouts: totalWorkouts,
           sets: totalSets,
-          duration: estimatedDuration
+          duration: formattedDuration
         }}
       />
 
