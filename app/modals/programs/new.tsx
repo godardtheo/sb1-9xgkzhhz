@@ -11,6 +11,7 @@ import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
+import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
 type SelectedWorkout = {
   id: string;
@@ -82,12 +83,10 @@ export default function NewProgramScreen() {
 
   const totalWorkouts = selectedWorkouts.length;
   const totalSets = selectedWorkouts.reduce((acc, workout) => acc + (workout.exercise_count * 4), 0);
-  const estimatedDuration = selectedWorkouts.reduce((acc, workout) => {
-    const durationString = workout.estimated_duration || '';
-    const durationMatch = durationString.match(/(\d+)/);
-    const duration = durationMatch ? parseInt(durationMatch[0]) : 0;
-    return acc + duration;
+  const totalMinutes = selectedWorkouts.reduce((acc, workout) => {
+    return acc + parseDurationToMinutes(workout.estimated_duration);
   }, 0);
+  const formattedDuration = formatDuration(totalMinutes);
 
   const handleSave = async () => {
     try {
@@ -259,6 +258,13 @@ export default function NewProgramScreen() {
             <Text style={styles.statValue}>{totalSets}</Text>
             <Text style={styles.statLabel}>sets</Text>
           </View>
+
+          <View style={styles.statDivider} />
+
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{formattedDuration}</Text>
+            <Text style={styles.statLabel}>duration</Text>
+          </View>
         </View>
 
         <Pressable 
@@ -364,7 +370,7 @@ export default function NewProgramScreen() {
         metrics={{
           workouts: totalWorkouts,
           sets: totalSets,
-          duration: estimatedDuration
+          duration: formattedDuration
         }}
       />
 
