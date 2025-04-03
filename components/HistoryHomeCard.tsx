@@ -43,8 +43,8 @@ export default function HistoryHomeCard() {
   };
 
   const handlePress = () => {
-    // Navigate to history screen (to be implemented later)
-    alert('History screen will be implemented later');
+    // Navigate to workout history modal
+    router.push('/modals/workout-history');
   };
 
   if (loading) {
