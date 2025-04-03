@@ -8,9 +8,19 @@ type Props = {
   onClose: () => void;
   loading?: boolean;
   workoutName: string;
+  context?: 'template' | 'history';
 };
 
-export default function DeleteWorkoutConfirmation({ visible, onConfirm, onClose, loading, workoutName }: Props) {
+export default function DeleteWorkoutConfirmation({ 
+  visible, 
+  onConfirm, 
+  onClose, 
+  loading, 
+  workoutName,
+  context = 'template' 
+}: Props) {
+  const isHistory = context === 'history';
+  
   return (
     <Modal
       visible={visible}
@@ -27,7 +37,7 @@ export default function DeleteWorkoutConfirmation({ visible, onConfirm, onClose,
         >
           <View style={styles.modalContent}>
             <View style={styles.header}>
-              <Text style={styles.title}>Remove Workout</Text>
+              <Text style={styles.title}>{isHistory ? 'Delete Workout' : 'Remove Workout'}</Text>
               <Pressable 
                 onPress={onClose}
                 style={styles.closeButton}
@@ -38,7 +48,10 @@ export default function DeleteWorkoutConfirmation({ visible, onConfirm, onClose,
             </View>
 
             <Text style={styles.message}>
-              Are you sure you want to remove "{workoutName}" from this program? This action cannot be undone.
+              {isHistory 
+                ? `Are you sure you want to delete "${workoutName}" from workout history? This action cannot be undone.`
+                : `Are you sure you want to remove "${workoutName}" from this program? This action cannot be undone.`
+              }
             </Text>
 
             <View style={styles.actions}>
@@ -55,7 +68,7 @@ export default function DeleteWorkoutConfirmation({ visible, onConfirm, onClose,
                 disabled={loading}
               >
                 <Text style={[styles.buttonText, styles.deleteButtonText]}>
-                  {loading ? 'Removing...' : 'Remove'}
+                  {loading ? (isHistory ? 'Deleting...' : 'Removing...') : (isHistory ? 'Delete' : 'Remove')}
                 </Text>
               </Pressable>
             </View>
