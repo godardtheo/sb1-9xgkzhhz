@@ -81,7 +81,7 @@ export default function PieChartCard({ title, metrics, data }: PieChartCardProps
             }}
             accessor="population"
             backgroundColor="transparent"
-            paddingLeft="15"
+            paddingLeft="30"
             absolute
             hasLegend={false}
           />
