@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import TimeFilter, { TimePeriod } from '../../components/TimeFilter';
 import PieChartCard from '../../components/PieChartCard';
 import BarChartCard from '../../components/BarChartCard';
+import WorkoutsDurationChartCard from '../../components/WorkoutsDurationChartCard';
 
 export default function StatisticsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('7D');
@@ -14,17 +15,6 @@ export default function StatisticsScreen() {
     { name: 'Legs', value: 20, color: '#0f766e' },
     { name: 'Shoulders', value: 15, color: '#115e59' },
     { name: 'Arms', value: 10, color: '#134e4a' },
-  ];
-
-  // Sample data for workouts bar chart
-  const workoutData = [
-    { date: '2023-04-01', value: 2 },
-    { date: '2023-04-02', value: 0 },
-    { date: '2023-04-03', value: 1 },
-    { date: '2023-04-04', value: 2 },
-    { date: '2023-04-05', value: 0 },
-    { date: '2023-04-06', value: 1 },
-    { date: '2023-04-07', value: 2 },
   ];
 
   // Sample data for sets bar chart
@@ -53,15 +43,7 @@ export default function StatisticsScreen() {
           onPeriodChange={setSelectedPeriod}
         />
         
-        <BarChartCard
-          title="Workouts"
-          metrics={[
-            { label: 'Total workouts', value: '8' },
-            { label: 'Average duration', value: '64 min' },
-          ]}
-          data={workoutData}
-          period={selectedPeriod}
-        />
+        <WorkoutsDurationChartCard period={selectedPeriod} />
 
         <BarChartCard
           title="Sets"
