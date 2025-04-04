@@ -25,17 +25,22 @@ interface BarChartCardProps extends Omit<ChartCardProps, 'children'> {
 export default function BarChartCard({ 
   title, 
   metrics, 
-  data, 
+  data = [],
   period, 
   yAxisSuffix = '',
   yAxisLabel = '',
   color = '#14b8a6'
 }: BarChartCardProps) {
   const { width } = useWindowDimensions();
-  const chartWidth = width - 60; // Adjusted width for better centering
+  const chartWidth = width - 30; // Make chart wider to fill more space
 
   // Format data based on selected time period
-  const formattedData = formatDataForPeriod(data, period);
+  const formattedData = formatDataForPeriod(data || [], period);
+  
+  // Ensure we have at least one data point to prevent rendering errors
+  if (formattedData.length === 0) {
+    formattedData.push({ label: '', value: 0 });
+  }
 
   // Chart data structure
   const chartData = {
@@ -43,7 +48,7 @@ export default function BarChartCard({
     datasets: [
       {
         data: formattedData.map(item => item.value),
-        color: () => '#14b8a6', // Solid color for bars with no opacity
+        color: () => color,
       },
     ],
   };
@@ -55,63 +60,49 @@ export default function BarChartCard({
   return (
     <ChartCard title={title} metrics={metrics}>
       <View style={styles.chartWrapper}>
-        <BarChart
-          data={chartData}
-          width={chartWidth}
-          height={220}
-          yAxisLabel={yAxisLabel}
-          yAxisSuffix={yAxisSuffix}
-          chartConfig={{
-            backgroundColor: '#0d3d56',
-            backgroundGradientFrom: '#0d3d56',
-            backgroundGradientTo: '#0d3d56',
-            decimalPlaces: 0,
-            color: () => '#14b8a6', // Solid color with no opacity
-            labelColor: () => '#5eead4',
-            barPercentage: 0.7,
-            barRadius: 5,
-            // Custom grid lines
-            propsForBackgroundLines: {
-              strokeDasharray: ['6', '6'], // Dotted lines for grid
-              stroke: "rgba(94, 234, 212, 0.2)",
-            },
-            // Custom styling for labels
-            propsForLabels: {
-              fontSize: 11,
-              fontFamily: 'Inter-Regular',
-            },
-            style: {
-              borderRadius: 16,
-            },
-            // Make grid lines more visible
-            strokeWidth: 1,
-          }}
-          withInnerLines={true}
-          fromZero
-          showValuesOnTopOfBars={false}
-          showBarTops={true}
-          segments={4}
-          style={styles.chart}
-          withHorizontalLabels={true}
-          horizontalLabelRotation={0}
-          verticalLabelRotation={0}
-          flatColor={true}
-        />
-        
-        {/* Custom axis lines and grid lines */}
-        <View style={styles.xAxisLine} />
-        <View style={styles.yAxisLine} />
-        
-        {/* Custom horizontal grid lines that start from y-axis */}
-        {[0, 1, 2, 3, 4].map((i) => (
-          <View 
-            key={`hgrid-${i}`} 
-            style={[
-              styles.horizontalGridLine, 
-              { bottom: 35 + i * (180 / 4) }
-            ]} 
+        {/* Negative left margin container to shift chart left */}
+        <View style={styles.chartShiftContainer}>
+          <BarChart
+            data={chartData}
+            width={chartWidth}
+            height={220}
+            yAxisLabel={yAxisLabel}
+            yAxisSuffix={yAxisSuffix}
+            chartConfig={{
+              backgroundColor: '#0d3d56',
+              backgroundGradientFrom: '#0d3d56',
+              backgroundGradientTo: '#0d3d56',
+              decimalPlaces: 0,
+              color: () => color,
+              fillShadowGradient: color,
+              fillShadowGradientOpacity: 1,
+              labelColor: () => '#5eead4',
+              barPercentage: 0.7,
+              barRadius: 5,
+              propsForBackgroundLines: {
+                strokeDasharray: ['6', '6'],
+                stroke: "rgba(94, 234, 212, 0.2)",
+              },
+              propsForLabels: {
+                fontSize: 10,
+                fontFamily: 'Inter-Regular',
+              },
+              style: {
+                borderRadius: 16,
+              },
+              strokeWidth: 1,
+            }}
+            withInnerLines={true}
+            fromZero
+            showValuesOnTopOfBars={false}
+            showBarTops={false}
+            segments={4}
+            style={styles.chart}
+            withHorizontalLabels={true}
+            horizontalLabelRotation={0}
+            verticalLabelRotation={0}
           />
-        ))}
+        </View>
       </View>
     </ChartCard>
   );
@@ -119,6 +110,10 @@ export default function BarChartCard({
 
 // Helper function to format data based on time period
 function formatDataForPeriod(data: BarChartDataPoint[], period: TimePeriod): FormattedDataPoint[] {
+  if (!data || data.length === 0) {
+    return [];
+  }
+  
   // Sort data by date
   const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
@@ -159,6 +154,15 @@ function formatDataForPeriod(data: BarChartDataPoint[], period: TimePeriod): For
       });
       
       return Object.entries(monthlyData).map(([label, value]) => ({ label, value }));
+      
+    default:
+      return sortedData.map(item => {
+        const date = new Date(item.date);
+        return {
+          label: `${date.getDate()}/${date.getMonth() + 1}`,
+          value: item.value
+        };
+      });
   }
 }
 
@@ -168,28 +172,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 10,
     position: 'relative', // For absolute positioning of axis lines
+    overflow: 'hidden', // Prevent overflow when shifting chart
+  },
+  chartShiftContainer: {
+    marginLeft: -20, // Shift entire chart to the left
   },
   chart: {
     marginVertical: 8,
     borderRadius: 16,
-  },
-  xAxisLine: {
-    position: 'absolute',
-    left: 50, // Align with the left edge of chart area (after labels)
-    bottom: 35, // Position at the bottom of the chart area
-    right: 20,
-    height: 1,
-    backgroundColor: 'rgba(94, 234, 212, 0.8)', // Solid color for x-axis
-    zIndex: 10,
-  },
-  yAxisLine: {
-    position: 'absolute',
-    left: 50, // Align with the left edge of chart area (after labels)
-    bottom: 35, // Position at the bottom of the chart area
-    width: 1,
-    height: 180, // Height of the chart area
-    backgroundColor: 'rgba(94, 234, 212, 0.8)', // Solid color for y-axis
-    zIndex: 10,
   },
   horizontalGridLine: {
     position: 'absolute',
