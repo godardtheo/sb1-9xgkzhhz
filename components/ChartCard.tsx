@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 
 export interface Metric {
   label: string;
-  value: string;
+  value: string | React.ReactNode;
 }
 
 export interface ChartCardProps {
