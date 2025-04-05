@@ -1,8 +1,8 @@
-import React from 'react';
-import { View, StyleSheet, useWindowDimensions, Text } from 'react-native';
-import { BarChart } from 'react-native-chart-kit';
+import React, { useState, useMemo, useRef } from 'react';
+import { View, StyleSheet, useWindowDimensions, Text, Pressable, ScrollView, Platform } from 'react-native';
 import ChartCard, { ChartCardProps } from './ChartCard';
 import { TimePeriod } from './TimeFilter';
+import { LinearGradient } from 'react-native-svg';
 
 export interface BarChartDataPoint {
   date: string;
@@ -23,6 +23,7 @@ interface BarChartCardProps extends Omit<ChartCardProps, 'children'> {
   emptyStateMessage?: string;
   formatYLabel?: (yValue: string) => string;
   yAxisLabelXOffset?: number;
+  segments?: number;
 }
 
 export default function BarChartCard({ 
@@ -34,244 +35,323 @@ export default function BarChartCard({
   yAxisLabel = '',
   color = '#14b8a6',
   emptyStateMessage,
-  formatYLabel,
-  yAxisLabelXOffset
+  formatYLabel = (yValue) => yValue,
+  yAxisLabelXOffset,
+  segments = 4
 }: BarChartCardProps) {
   const { width } = useWindowDimensions();
   const chartWidth = width - 80; // Preserve the existing width setting
-
-  // Get full range data for the period (including days with no workouts)
-  const fullRangeData = getFullRangeDataForPeriod(data, period);
+  const chartHeight = 180; // Slightly reduced height
+  const Y_AXIS_WIDTH = 50; // Space for Y-axis labels
+  const MAX_SEGMENTS = 6; // Max number of dashed lines (segments+1 total lines including zero)
   
-  // Format data based on selected time period
-  const formattedData = formatDataForPeriod(fullRangeData, period);
+  // State to track selected bar for tooltip
+  const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
   
-  // Ensure we have at least one data point to prevent rendering errors
-  if (formattedData.length === 0) {
-    formattedData.push({ label: '', value: 0 });
-  }
+  // Memoize data processing to prevent recalculation on every render
+  const fullRangeData = useMemo(() => 
+    getFullRangeDataForPeriod(data, period), 
+    [data, period]
+  );
+  
+  // Memoize formatted data to prevent recalculation on every render
+  const formattedData = useMemo(() => {
+    let formatted = formatDataForPeriod(fullRangeData, period);
+    
+    // Filter labels for 14D to show only 1 out of 4 labels
+    if (period === '14D' && formatted.length > 7) {
+      formatted = formatted.map((item, index) => {
+        return {
+          ...item,
+          // Only display label for every fourth day
+          displayLabel: index % 4 === 0
+        };
+      });
+    } else {
+      formatted = formatted.map(item => ({
+        ...item,
+        displayLabel: true
+      }));
+    }
+    
+    // Ensure we have at least one data point to prevent rendering errors
+    if (formatted.length === 0) {
+      return [{ label: '', value: 0, displayLabel: true }];
+    }
+    return formatted;
+  }, [fullRangeData, period]);
 
-  // Chart data structure
-  const chartData = {
-    labels: formattedData.map(item => item.label),
-    datasets: [
-      {
-        data: formattedData.map(item => item.value),
-        color: () => color,
-      },
-    ],
+  // Calculate max value for Y axis scaling
+  const maxValue = useMemo(() => {
+    const max = Math.max(...formattedData.map(item => item.value), 1);
+    // Round up to nice number based on magnitude
+    if (max <= 10) return Math.ceil(max * 1.2); // Small values, round to nearest 1
+    if (max <= 100) return Math.ceil(max * 1.1 / 5) * 5; // Medium values, round to nearest 5
+    return Math.ceil(max * 1.1 / 10) * 10; // Large values, round to nearest 10
+  }, [formattedData]);
+  
+  // Generate Y axis tick values - limited to MAX_SEGMENTS+1 values (including 0)
+  const yTicks = useMemo(() => {
+    // Use the smaller of segments or MAX_SEGMENTS
+    const tickCount = Math.min(segments, MAX_SEGMENTS);
+    const interval = maxValue / tickCount;
+    return Array.from({ length: tickCount + 1 }, (_, i) => i * interval);
+  }, [maxValue, segments]);
+
+  // Check if we should show empty state message
+  const showEmptyState = useMemo(() => 
+    data.length === 0 && emptyStateMessage, 
+    [data.length, emptyStateMessage]
+  );
+  
+  // Handle bar selection
+  const handleBarPress = (index: number) => {
+    setSelectedBarIndex(prev => prev === index ? null : index);
   };
 
-  // Determine maximum value for Y-axis scale and round it to nearest 10
-  const maxValue = Math.max(...formattedData.map(item => item.value), 1);
-  const roundedMaxValue = Math.ceil(maxValue / 10) * 10; // Round to nearest multiple of 10
-  const yAxisMax = Math.ceil(roundedMaxValue * 1.1); // Add 10% headroom
-  
-  // Check if we should show empty state message
-  const showEmptyState = data.length === 0 && emptyStateMessage;
+  // Format X-axis label for display
+  const formatXAxisLabel = (item: FormattedDataPoint & { displayLabel?: boolean }, index: number) => {
+    // Don't display label if displayLabel is false
+    if (item.displayLabel === false) return '';
+    
+    // For 7D and 14D, show dd/mm format
+    if (period === '7D' || period === '14D') {
+      const matchedData = data.find(d => {
+        const dateObj = new Date(d.date);
+        return dateObj.getDate().toString() === item.label;
+      });
+      
+      if (matchedData) {
+        const date = new Date(matchedData.date);
+        return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      }
+    }
+    
+    return item.label;
+  };
 
-  // Calculate optimal bar width based on number of bars
-  // More bars = narrower bars to prevent overlap
-  const barPercentage = Math.min(0.7, 0.9 / Math.sqrt(formattedData.length));
+  // Format tooltip label
+  const formatTooltipLabel = (label: string, index: number) => {
+    const originalData = data.find(d => {
+      const dateObj = new Date(d.date);
+      const dayStr = dateObj.getDate().toString();
+      const monthStr = dateObj.toLocaleString('default', { month: 'short' }).substring(0, 3);
+      return dayStr === label || monthStr === label;
+    });
+    
+    if (!originalData) return label;
+    
+    const date = new Date(originalData.date);
+    
+    switch(period) {
+      case '7D':
+      case '14D':
+        // Format as dd/mm
+        return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      case '1M':
+        // Just W# without "Week"
+        return `W${label.replace('W', '')}`;
+      case '12M':
+      case 'ALL':
+        // Short month + year (last 2 digits)
+        const yearSuffix = date.getFullYear().toString().slice(-2);
+        return `${label} ${yearSuffix}`;
+      default:
+        return label;
+    }
+  };
+  
+  // Format tooltip value with unit
+  const formatTooltipValue = (value: number) => {
+    // Format for duration (convert minutes to HH:MM)
+    if (yAxisSuffix === 'min') {
+      const hours = Math.floor(value / 60);
+      const minutes = Math.floor(value % 60);
+      return `${hours}:${minutes.toString().padStart(2, '0')}`;
+    }
+    
+    // Default formatting for other units
+    return value.toString();
+  };
+
+  // If we need to show the empty state message
+  if (showEmptyState) {
+    return (
+      <ChartCard title={title} metrics={metrics}>
+        <View style={styles.chartWrapper}>
+          <View style={styles.emptyStateContainer}>
+            <Text style={styles.emptyStateText}>{emptyStateMessage}</Text>
+          </View>
+        </View>
+      </ChartCard>
+    );
+  }
+  
+  // Calculate the ideal bar width based on number of bars and chart width
+  const effectiveChartWidth = chartWidth - Y_AXIS_WIDTH;
+  const idealBarWidth = Math.min(60, effectiveChartWidth / formattedData.length);
+  const barContainerWidth = formattedData.length * idealBarWidth;
+  const needsScrolling = barContainerWidth > effectiveChartWidth;
 
   return (
     <ChartCard title={title} metrics={metrics}>
       <View style={styles.chartWrapper}>
-        {showEmptyState ? (
-          <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>{emptyStateMessage}</Text>
-          </View>
-        ) : (
-          // Negative left margin container to shift chart left
-          <View style={styles.chartShiftContainer}>
-            {/* Add explicit left padding to ensure y-axis labels are visible */}
-            <View style={{ paddingLeft: 10 }}>
-              <BarChart
-                data={chartData}
-                width={chartWidth}
-                height={200} // Maintain reduced height for custom X-axis labels
-                yAxisLabel={yAxisLabel}
-                yAxisSuffix={yAxisSuffix}
-                chartConfig={{
-                  backgroundColor: '#0d3d56',
-                  backgroundGradientFrom: '#0d3d56',
-                  backgroundGradientTo: '#0d3d56',
-                  decimalPlaces: 0,
-                  color: () => color,
-                  fillShadowGradient: color,
-                  fillShadowGradientOpacity: 1,
-                  labelColor: () => 'rgba(94, 234, 212, 1)',
-                  // Adjust bar width based on number of bars to prevent overlap
-                  barPercentage: barPercentage,
-                  barRadius: 5,
-                  propsForBackgroundLines: {
-                    strokeDasharray: ['6', '6'],
-                    stroke: "rgba(94, 234, 212, 0.2)",
-                  },
-                  propsForLabels: {
-                    fontSize: 11,
-                    fontFamily: 'Inter-Regular',
-                    // Use configurable X offset for Y-axis labels
-                    x: yAxisLabelXOffset || 16,
-                    fill: 'rgba(94, 234, 212, 1)',
-                    fontWeight: '500',
-                  },
-                  // Use custom formatter if provided, otherwise use default
-                  formatYLabel: formatYLabel || (yValue => yValue),
-                  // Hide original X labels, we'll use custom ones
-                  formatXLabel: (xLabel: string) => "", 
-                  style: {
-                    borderRadius: 16,
-                    paddingLeft: 40, // Reduced to decrease space between Y-axis and first bar
-                    paddingRight: 10,
-                    paddingBottom: 0,
-                  },
-                  strokeWidth: 1,
-                }}
-                withInnerLines={true}
-                fromZero
-                showValuesOnTopOfBars={false}
-                showBarTops={false}
-                segments={4}
-                style={styles.chart}
-                withHorizontalLabels={true}
-                withVerticalLabels={false} // Turn off built-in X-axis labels
-                horizontalLabelRotation={0}
-                verticalLabelRotation={0}
-              />
+        {/* Extra spacing added between metrics and chart */}
+        <View style={styles.spacer} />
+        
+        <View style={styles.chartContainer}>
+          <View style={{ height: chartHeight, width: chartWidth }}>
+            {/* Y-axis labels - positioned above each line */}
+            <View style={[styles.yAxisLabels, { width: Y_AXIS_WIDTH }]}>
+              {yTicks.map((tick, i) => {
+                return (
+                  <Text 
+                    key={`y-tick-${i}`} 
+                    style={[
+                      styles.yAxisLabel,
+                      { 
+                        // Position above the line
+                        bottom: (i * chartHeight / yTicks.length) + 5
+                      }
+                    ]}
+                  >
+                    {formatYLabel(tick.toString())}
+                    {i === yTicks.length - 1 && yAxisSuffix ? ` ${yAxisSuffix}` : ''}
+                  </Text>
+                );
+              })}
+            </View>
+            
+            <View style={styles.chartContent}>
+              {/* Horizontal grid lines - positioned from bottom */}
+              {yTicks.map((tick, i) => {
+                return (
+                  <View 
+                    key={`grid-${i}`} 
+                    style={[
+                      styles.gridLine,
+                      { 
+                        // Position from bottom to top
+                        bottom: (i * chartHeight / yTicks.length)
+                      }
+                    ]} 
+                  />
+                );
+              })}
               
-              {/* Custom X-axis labels with improved positioning */}
-              <XAxisLabels 
-                labels={formattedData.map(item => item.label)} 
-                width={chartWidth - 60} // Adjusted width to better match bars
-                color="rgba(94, 234, 212, 1)"
-                labelCount={formattedData.length}
-                period={period}
-              />
+              {/* Chart area with scrolling for many bars */}
+              <ScrollView 
+                horizontal={needsScrolling}
+                showsHorizontalScrollIndicator={false}
+                scrollEnabled={needsScrolling} // Only enable horizontal scrolling
+                style={styles.scrollView}
+                contentContainerStyle={[
+                  styles.scrollViewContent,
+                  { width: needsScrolling ? barContainerWidth : '100%' }
+                ]}
+              >
+                {/* Bars container */}
+                <View style={styles.barsContainer}>
+                  {formattedData.map((item, index) => {
+                    // Skip rendering bars for zero values
+                    if (item.value === 0) {
+                      return (
+                        <View 
+                          key={`empty-bar-${index}`}
+                          style={[
+                            styles.barWrapper,
+                            { width: idealBarWidth }
+                          ]}
+                        >
+                          {/* Just render X-axis label for zero values */}
+                          <Text style={styles.xAxisLabel}>
+                            {formatXAxisLabel(item, index)}
+                          </Text>
+                        </View>
+                      );
+                    }
+                    
+                    // Calculate height as percentage of chart height
+                    const barHeightPercent = item.value / maxValue;
+                    const barHeight = barHeightPercent * (chartHeight - 25); // Subtract padding for x-axis labels
+                    const isSelected = selectedBarIndex === index;
+                    
+                    return (
+                      <Pressable 
+                        key={`bar-${index}`}
+                        style={[
+                          styles.barWrapper,
+                          { width: idealBarWidth }
+                        ]}
+                        onPress={() => handleBarPress(index)}
+                      >
+                        {/* Actual bar with gradient */}
+                        <View 
+                          style={[
+                            styles.bar,
+                            { 
+                              height: Math.max(barHeight, 5),
+                              backgroundColor: isSelected ? '#FF90B3' : color,
+                              overflow: 'hidden'
+                            }
+                          ]}
+                        >
+                          {!isSelected && (
+                            <View style={[styles.barGradient, { backgroundColor: color }]} />
+                          )}
+                        </View>
+                        
+                        {/* X-axis label */}
+                        <Text style={styles.xAxisLabel}>
+                          {formatXAxisLabel(item, index)}
+                        </Text>
+                        
+                        {/* Tooltip for selected bar - positioned with absolute position */}
+                        {isSelected && (
+                          <View 
+                            style={[
+                              styles.tooltip,
+                              {
+                                // Position tooltip so it's always visible
+                                bottom: barHeight + 10,
+                                // Adjust left position to ensure it's not cut off
+                                left: index === formattedData.length - 1 ? 
+                                  'auto' : '50%',
+                                right: index === formattedData.length - 1 ? 
+                                  0 : 'auto',
+                                transform: index === formattedData.length - 1 ? 
+                                  [{ translateX: 0 }] : [{ translateX: -40 }]
+                              }
+                            ]}
+                          >
+                            <View style={styles.tooltipContent}>
+                              <View style={styles.tooltipInnerContent}>
+                                <Text style={styles.tooltipLabel}>
+                                  {formatTooltipLabel(item.label, index)}:
+                                </Text>
+                                <View style={styles.tooltipValueContainer}>
+                                  <Text style={styles.tooltipValue}>
+                                    {formatTooltipValue(item.value)}
+                                  </Text>
+                                  {yAxisSuffix && yAxisSuffix !== 'min' && (
+                                    <Text style={styles.tooltipUnit}>{yAxisSuffix}</Text>
+                                  )}
+                                </View>
+                              </View>
+                            </View>
+                            <View style={styles.tooltipArrow} />
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             </View>
           </View>
-        )}
+        </View>
       </View>
     </ChartCard>
-  );
-}
-
-// Custom component to render X-axis labels with improved positioning
-function XAxisLabels({ 
-  labels, 
-  width, 
-  color, 
-  labelCount,
-  period
-}: { 
-  labels: string[], 
-  width: number, 
-  color: string,
-  labelCount: number,
-  period?: TimePeriod
-}) {
-  // Only render if we have labels
-  if (!labels || labels.length === 0) return null;
-  
-  // For 14D period, only show every other label to prevent crowding
-  let displayLabels = [...labels];
-  let displayIndices: number[] = [];
-  
-  if (period === '14D' && labels.length > 7) {
-    // Create array of indices to display, avoiding duplicates
-    const uniqueLabels = new Set<string>();
-    const indexesToDisplay: number[] = [];
-    
-    // First pass: collect all unique labels and their first occurrence
-    const labelFirstIndexMap = new Map<string, number>();
-    labels.forEach((label, index) => {
-      if (!labelFirstIndexMap.has(label)) {
-        labelFirstIndexMap.set(label, index);
-      }
-    });
-    
-    // Add indices of first occurrence of each unique label
-    for (let i = 0; i < labels.length; i += 2) { // Every other index
-      const label = labels[i];
-      if (!uniqueLabels.has(label)) {
-        uniqueLabels.add(label);
-        indexesToDisplay.push(i);
-      }
-    }
-    
-    // If we have few unique labels, add more to ensure sufficient spacing
-    if (indexesToDisplay.length < 5 && labels.length > 5) {
-      for (let i = 1; i < labels.length; i += 2) {
-        const label = labels[i];
-        if (!uniqueLabels.has(label)) {
-          uniqueLabels.add(label);
-          indexesToDisplay.push(i);
-          if (indexesToDisplay.length >= 7) break; // Limit number of labels
-        }
-      }
-    }
-    
-    // Sort indices to maintain correct order
-    displayIndices = indexesToDisplay.sort((a, b) => a - b);
-  } else {
-    // For other periods, show all labels
-    displayIndices = labels.map((_, i) => i);
-  }
-  
-  // Special adjustment for few bars - they need more offset
-  let leftMargin = 55;
-  
-  if (labelCount === 2) {
-    leftMargin = 24;
-  } else if (labelCount === 3) {
-    leftMargin = 38;
-  } else if (labelCount <= 5) {
-    leftMargin = 52;
-  } else if (labelCount >= 7) {
-    // For many bars, adjust margin to account for crowding
-    leftMargin = 58;
-  }
-  
-  // Calculate width for each label section
-  const sectionWidth = width / labelCount;
-  
-  // If we have many bars, add a limit to minimum section width
-  // to avoid text overlap
-  const isManyBars = labelCount > 6;
-  
-  return (
-    <View style={[
-      styles.xAxisLabelsContainer, 
-      { 
-        marginLeft: leftMargin,
-        width: width,
-        marginTop: 0 
-      }
-    ]}>
-      {labels.map((label, index) => {
-        // Only render labels at selected indices
-        const shouldDisplay = displayIndices.includes(index);
-        
-        // For many bars, use a more compact label rendering
-        const compactText = isManyBars ? { fontSize: 9 } : {};
-        
-        return (
-          <View 
-            key={`label-${index}`} 
-            style={[
-              styles.xAxisLabelSection, 
-              { width: sectionWidth }
-            ]}
-          >
-            {shouldDisplay && (
-              <Text style={[styles.xAxisLabelText, compactText, { color }]}>
-                {label}
-              </Text>
-            )}
-          </View>
-        );
-      })}
-    </View>
   );
 }
 
@@ -353,7 +433,8 @@ function formatDataForPeriod(data: BarChartDataPoint[], period: TimePeriod): For
   
   switch (period) {
     case '7D':
-      // For 7 day period, show all daily labels
+    case '14D':
+      // For 7/14 day period, show all daily labels
       return sortedData.map(item => {
         const date = new Date(item.date);
         return {
@@ -362,16 +443,6 @@ function formatDataForPeriod(data: BarChartDataPoint[], period: TimePeriod): For
         };
       });
     
-    case '14D':
-      // For 14 day period, show all data points with day labels
-      return sortedData.map(item => {
-        const date = new Date(item.date);
-        return {
-          label: `${date.getDate()}`,
-          value: item.value
-        };
-      });
-      
     case '1M':
       // For medium periods, show weekly intervals with clearer labels
       const weeklyData: {[key: string]: number} = {};
@@ -410,56 +481,157 @@ function formatDataForPeriod(data: BarChartDataPoint[], period: TimePeriod): For
 
 const styles = StyleSheet.create({
   chartWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
+    flex: 1,
+    width: '100%',
+  },
+  spacer: {
+    height: 20, // Extra space between metrics and chart
+  },
+  chartContainer: {
     position: 'relative',
-    overflow: 'visible',
-    paddingBottom: 8,
+    height: 220, // Reduced height
   },
-  chartShiftContainer: {
-    marginLeft: -10,
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 180, // Adjusted height
   },
-  chart: {
-    marginVertical: 0,
-    borderRadius: 16,
-    paddingBottom: 0,
+  emptyStateText: {
+    color: 'rgba(94, 234, 212, 0.6)',
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
   },
-  horizontalGridLine: {
+  chartContent: {
+    flex: 1,
+    flexDirection: 'row',
+    position: 'relative',
+    paddingLeft: 50, // Space for Y-axis labels
+    height: 180, // Adjusted height
+  },
+  yAxisLabels: {
     position: 'absolute',
-    left: 50, // Start at y-axis
-    right: 20, // End at right boundary
+    left: 0,
+    top: 0,
+    height: '100%',
+    width: 50,
+    zIndex: 10,
+  },
+  yAxisLabel: {
+    color: 'rgba(94, 234, 212, 1)',
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    textAlign: 'right',
+    position: 'absolute',
+    right: 5,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     height: 1,
     backgroundColor: 'rgba(94, 234, 212, 0.2)',
     borderStyle: 'dashed',
     borderWidth: 0.5,
     borderColor: 'rgba(94, 234, 212, 0.2)',
-    borderRadius: 1,
-    zIndex: 5,
   },
-  emptyStateContainer: {
-    height: 220,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+  scrollView: {
+    flex: 1,
+    height: '100%', // Ensure no vertical scrolling
   },
-  emptyStateText: {
-    color: '#5eead4',
-    textAlign: 'center',
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
+  scrollViewContent: {
+    flexGrow: 1,
+    height: '100%', // Ensure no vertical scrolling
   },
-  xAxisLabelsContainer: {
+  barsContainer: {
+    flex: 1,
     flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: '100%',
+    paddingBottom: 25, // Space for X-axis labels
   },
-  xAxisLabelSection: {
+  barWrapper: {
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
+    position: 'relative',
   },
-  xAxisLabelText: {
+  bar: {
+    width: '80%',
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+  },
+  barGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.7,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+    // Gradient effect
+    borderTopWidth: 5,
+    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  xAxisLabel: {
+    color: 'rgba(94, 234, 212, 1)',
     fontSize: 11,
     fontFamily: 'Inter-Regular',
+    marginTop: 5,
     textAlign: 'center',
+    width: '100%',
+  },
+  tooltip: {
+    position: 'absolute',
+    zIndex: 100, // Much higher z-index to ensure visibility
+    width: 80, // Fixed width for consistent look
+  },
+  tooltipContent: {
+    backgroundColor: '#115e59',
+    borderRadius: 8,
+    padding: 8,
+    width: '100%',
+  },
+  tooltipInnerContent: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
+  tooltipArrow: {
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
+    borderBottomWidth: 0,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#115e59',
+    alignSelf: 'center',
+  },
+  tooltipLabel: {
+    color: '#5eead4',
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    marginRight: 4,
+  },
+  tooltipValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  tooltipValue: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+  },
+  tooltipUnit: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    marginLeft: 2,
   },
 }); 

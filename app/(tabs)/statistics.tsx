@@ -4,6 +4,8 @@ import TimeFilter, { TimePeriod } from '../../components/TimeFilter';
 import PieChartCard from '../../components/PieChartCard';
 import BarChartCard from '../../components/BarChartCard';
 import WorkoutsDurationChartCard from '../../components/WorkoutsDurationChartCard';
+import SetsChartCard from '../../components/SetsChartCard';
+import WeightLiftedChartCard from '../../components/WeightLiftedChartCard';
 
 export default function StatisticsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('7D');
@@ -15,17 +17,6 @@ export default function StatisticsScreen() {
     { name: 'Legs', value: 20, color: '#0f766e' },
     { name: 'Shoulders', value: 15, color: '#115e59' },
     { name: 'Arms', value: 10, color: '#134e4a' },
-  ];
-
-  // Sample data for sets bar chart
-  const setsData = [
-    { date: '2023-04-01', value: 18 },
-    { date: '2023-04-02', value: 0 },
-    { date: '2023-04-03', value: 12 },
-    { date: '2023-04-04', value: 15 },
-    { date: '2023-04-05', value: 0 },
-    { date: '2023-04-06', value: 8 },
-    { date: '2023-04-07', value: 20 },
   ];
 
   return (
@@ -44,16 +35,10 @@ export default function StatisticsScreen() {
         />
         
         <WorkoutsDurationChartCard period={selectedPeriod} />
-
-        <BarChartCard
-          title="Sets"
-          metrics={[
-            { label: 'Total', value: '73' },
-            { label: 'Average/workout', value: '9.1' },
-          ]}
-          data={setsData}
-          period={selectedPeriod}
-        />
+        
+        <SetsChartCard period={selectedPeriod} />
+        
+        <WeightLiftedChartCard period={selectedPeriod} />
         
         <PieChartCard
           title="Muscle Breakdown"
