@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { View, StyleSheet, useWindowDimensions, Text, Pressable, ScrollView, Platform } from 'react-native';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { View, StyleSheet, useWindowDimensions, Text, Pressable, ScrollView, Platform, ViewStyle, LayoutChangeEvent, LayoutRectangle } from 'react-native';
 import ChartCard, { ChartCardProps } from './ChartCard';
 import { TimePeriod } from './TimeFilter';
 import { LinearGradient } from 'react-native-svg';
@@ -12,6 +12,7 @@ export interface BarChartDataPoint {
 export interface FormattedDataPoint {
   label: string;
   value: number;
+  displayLabel?: boolean;
 }
 
 interface BarChartCardProps extends Omit<ChartCardProps, 'children'> {
@@ -25,6 +26,12 @@ interface BarChartCardProps extends Omit<ChartCardProps, 'children'> {
   yAxisLabelXOffset?: number;
   segments?: number;
 }
+
+// Fix Y_AXIS_WIDTH reference by moving it outside of the component
+const Y_AXIS_WIDTH = 50; // Space for Y-axis labels
+
+// Constants for tooltip sizing
+const TOOLTIP_WIDTH = 80; // Match the fixed width defined in styles.tooltip
 
 export default function BarChartCard({ 
   title, 
@@ -41,46 +48,50 @@ export default function BarChartCard({
 }: BarChartCardProps) {
   const { width } = useWindowDimensions();
   const chartWidth = width - 80; // Preserve the existing width setting
-  const chartHeight = 180; // Slightly reduced height
-  const Y_AXIS_WIDTH = 50; // Space for Y-axis labels
+  const chartHeight = 180; // Chart area height
   const MAX_SEGMENTS = 6; // Max number of dashed lines (segments+1 total lines including zero)
   
-  // State to track selected bar for tooltip
+  // State for bar selection and positioning
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
+  const [barLayouts, setBarLayouts] = useState<Array<LayoutRectangle | null>>([]);
+  const [scrollOffset, setScrollOffset] = useState(0);
   
-  // Memoize data processing to prevent recalculation on every render
+  // ScrollView refs
+  const scrollViewRef = useRef<ScrollView>(null);
+  const labelScrollViewRef = useRef<ScrollView>(null);
+  const [scrollX, setScrollX] = useState(0);
+  
+  // Reset selected bar when period changes
+  useEffect(() => {
+    setSelectedBarIndex(null);
+  }, [period]);
+  
+  // Process data for display
   const fullRangeData = useMemo(() => 
     getFullRangeDataForPeriod(data, period), 
     [data, period]
   );
   
-  // Memoize formatted data to prevent recalculation on every render
+  // Format data for the current period
   const formattedData = useMemo(() => {
     let formatted = formatDataForPeriod(fullRangeData, period);
     
     // Filter labels for 14D to show only 1 out of 4 labels
     if (period === '14D' && formatted.length > 7) {
-      formatted = formatted.map((item, index) => {
-        return {
-          ...item,
-          // Only display label for every fourth day
-          displayLabel: index % 4 === 0
-        };
-      });
-    } else {
-      formatted = formatted.map(item => ({
+      formatted = formatted.map((item, index) => ({
         ...item,
-        displayLabel: true
+        displayLabel: index % 4 === 0
       }));
     }
     
-    // Ensure we have at least one data point to prevent rendering errors
+    // Empty state fallback
     if (formatted.length === 0) {
       return [{ label: '', value: 0, displayLabel: true }];
     }
+    
     return formatted;
   }, [fullRangeData, period]);
-
+  
   // Calculate max value for Y axis scaling
   const maxValue = useMemo(() => {
     const max = Math.max(...formattedData.map(item => item.value), 1);
@@ -90,167 +101,187 @@ export default function BarChartCard({
     return Math.ceil(max * 1.1 / 10) * 10; // Large values, round to nearest 10
   }, [formattedData]);
   
-  // Generate Y axis tick values - limited to MAX_SEGMENTS+1 values (including 0)
+  // Generate Y axis tick values
   const yTicks = useMemo(() => {
     // Use the smaller of segments or MAX_SEGMENTS
     const tickCount = Math.min(segments, MAX_SEGMENTS);
     const interval = maxValue / tickCount;
     return Array.from({ length: tickCount + 1 }, (_, i) => i * interval);
-  }, [maxValue, segments]);
-
-  // Check if we should show empty state message
-  const showEmptyState = useMemo(() => 
-    data.length === 0 && emptyStateMessage, 
-    [data.length, emptyStateMessage]
-  );
+  }, [maxValue, segments, MAX_SEGMENTS]);
+  
+  // Initialize bar layouts array
+  useEffect(() => {
+    setBarLayouts(new Array(formattedData.length).fill(null));
+  }, [formattedData.length]);
   
   // Handle bar selection
   const handleBarPress = (index: number) => {
     setSelectedBarIndex(prev => prev === index ? null : index);
   };
-
+  
+  // Store bar layout information when rendered
+  const handleBarLayout = (index: number, event: LayoutChangeEvent) => {
+    const layout = event.nativeEvent.layout;
+    setBarLayouts(prev => {
+      const newLayouts = [...prev];
+      newLayouts[index] = layout;
+      return newLayouts;
+    });
+  };
+  
+  // Calculate bar container width and ideal bar width
+  const effectiveChartWidth = chartWidth - Y_AXIS_WIDTH;
+  
+  // Ensure all bars fit within available width, no scrolling
+  let idealBarWidth: number;
+  
+  // Always calculate bar width based on available space and number of bars
+  idealBarWidth = effectiveChartWidth / formattedData.length;
+  
+  // Ensure bar width is never too small (floor of 15px)
+  idealBarWidth = Math.max(idealBarWidth, 15);
+  
+  // Calculate total width needed for all bars
+  const barContainerWidth = effectiveChartWidth;
+  
+  // No scrolling needed anymore
+  const needsScrolling = false;
+  
+  // Remove scroll handling since we're not scrolling anymore
+  const handleScroll = () => {};
+  
   // Format X-axis label for display
-  const formatXAxisLabel = (item: FormattedDataPoint & { displayLabel?: boolean }, index: number) => {
+  const formatXAxisLabel = (item: FormattedDataPoint, index: number): string => {
     // Don't display label if displayLabel is false
     if (item.displayLabel === false) return '';
     
-    // For 7D and 14D, show dd/mm format
+    // For 7D and 14D, show dd/mm format always
     if (period === '7D' || period === '14D') {
-      const matchedData = data.find(d => {
-        const dateObj = new Date(d.date);
-        return dateObj.getDate().toString() === item.label;
-      });
-      
-      if (matchedData) {
-        const date = new Date(matchedData.date);
+      // Get date string from original data for this date
+      const dateStr = getDateStringForIndex(index);
+      if (dateStr) {
+        const date = new Date(dateStr);
         return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
       }
     }
     
     return item.label;
   };
-
-  // Format tooltip label
-  const formatTooltipLabel = (label: string, index: number) => {
-    const originalData = data.find(d => {
+  
+  // Helper function to get date string from original data
+  const getDateStringForIndex = (index: number): string | null => {
+    // For 7D and 14D use the date index to find the matching date
+    if (period === '7D' || period === '14D') {
+      // Formatted data has all days, so we can determine the date from the index
+      if (fullRangeData[index]) {
+        return fullRangeData[index].date;
+      }
+    }
+    
+    // Fallback: Try to match by day value
+    const dayLabel = formattedData[index]?.label;
+    const matchedData = data.find(d => {
       const dateObj = new Date(d.date);
-      const dayStr = dateObj.getDate().toString();
-      const monthStr = dateObj.toLocaleString('default', { month: 'short' }).substring(0, 3);
-      return dayStr === label || monthStr === label;
+      return dateObj.getDate().toString() === dayLabel;
     });
     
-    if (!originalData) return label;
-    
-    const date = new Date(originalData.date);
-    
-    switch(period) {
-      case '7D':
-      case '14D':
-        // Format as dd/mm
-        return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-      case '1M':
-        // Just W# without "Week"
-        return `W${label.replace('W', '')}`;
-      case '12M':
-      case 'ALL':
-        // Short month + year (last 2 digits)
-        const yearSuffix = date.getFullYear().toString().slice(-2);
-        return `${label} ${yearSuffix}`;
-      default:
-        return label;
-    }
+    return matchedData?.date || null;
   };
   
-  // Format tooltip value with unit
-  const formatTooltipValue = (value: number) => {
-    // Format for duration (convert minutes to HH:MM)
-    if (yAxisSuffix === 'min') {
-      const hours = Math.floor(value / 60);
-      const minutes = Math.floor(value % 60);
-      return `${hours}:${minutes.toString().padStart(2, '0')}`;
+  // Format tooltip label
+  const formatTooltipLabel = (label: string, index: number): string => {
+    if (period === '7D' || period === '14D') {
+      const dateStr = getDateStringForIndex(index);
+      if (dateStr) {
+        const date = new Date(dateStr);
+        return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      }
     }
-    
-    // Default formatting for other units
+    return label;
+  };
+  
+  // Format tooltip value
+  const formatTooltipValue = (value: number): string => {
+    if (yAxisSuffix === 'min') {
+      // Format minutes with hours if >= 60
+      if (value >= 60) {
+        const hours = Math.floor(value / 60);
+        const mins = Math.round(value % 60);
+        return `${hours}h ${mins}m`;
+      }
+      return `${value}min`;
+    }
     return value.toString();
   };
-
-  // If we need to show the empty state message
-  if (showEmptyState) {
+  
+  // Adjust the chartContainer height to account for labels below
+  const chartContainerHeight = chartHeight + 30; // Added space for labels below
+  
+  // Render empty state if needed
+  if (data.length === 0 && emptyStateMessage) {
     return (
       <ChartCard title={title} metrics={metrics}>
-        <View style={styles.chartWrapper}>
-          <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>{emptyStateMessage}</Text>
-          </View>
+        <View style={styles.emptyStateContainer}>
+          <Text style={styles.emptyStateText}>{emptyStateMessage}</Text>
         </View>
       </ChartCard>
     );
   }
   
-  // Calculate the ideal bar width based on number of bars and chart width
-  const effectiveChartWidth = chartWidth - Y_AXIS_WIDTH;
-  const idealBarWidth = Math.min(60, effectiveChartWidth / formattedData.length);
-  const barContainerWidth = formattedData.length * idealBarWidth;
-  const needsScrolling = barContainerWidth > effectiveChartWidth;
-
   return (
     <ChartCard title={title} metrics={metrics}>
       <View style={styles.chartWrapper}>
-        {/* Extra spacing added between metrics and chart */}
         <View style={styles.spacer} />
         
-        <View style={styles.chartContainer}>
-          <View style={{ height: chartHeight, width: chartWidth }}>
-            {/* Y-axis labels - positioned above each line */}
+        <View style={[styles.chartContainer, { height: chartContainerHeight }]}>
+          <View style={[
+            { height: chartContainerHeight, width: chartWidth },
+            styles.chartContentWrapper
+          ]}>
+            {/* Y-axis labels */}
             <View style={[styles.yAxisLabels, { width: Y_AXIS_WIDTH }]}>
-              {yTicks.map((tick, i) => {
-                return (
-                  <Text 
-                    key={`y-tick-${i}`} 
-                    style={[
-                      styles.yAxisLabel,
-                      { 
-                        // Position above the line
-                        bottom: (i * chartHeight / yTicks.length) + 5
-                      }
-                    ]}
-                  >
-                    {formatYLabel(tick.toString())}
-                    {i === yTicks.length - 1 && yAxisSuffix ? ` ${yAxisSuffix}` : ''}
-                  </Text>
-                );
-              })}
+              {yTicks.map((tick, i) => (
+                <Text 
+                  key={`y-tick-${i}`} 
+                  style={[
+                    styles.yAxisLabel,
+                    { 
+                      bottom: (i * chartHeight / yTicks.length),
+                      transform: [{ translateY: -32 }]
+                    }
+                  ]}
+                >
+                  {formatYLabel(tick.toString())}
+                  {i === yTicks.length - 1 && yAxisSuffix ? ` ${yAxisSuffix}` : ''}
+                </Text>
+              ))}
             </View>
             
+            {/* Chart content with grid lines and bars */}
             <View style={styles.chartContent}>
-              {/* Horizontal grid lines - positioned from bottom */}
-              {yTicks.map((tick, i) => {
-                return (
-                  <View 
-                    key={`grid-${i}`} 
-                    style={[
-                      styles.gridLine,
-                      { 
-                        // Position from bottom to top
-                        bottom: (i * chartHeight / yTicks.length)
-                      }
-                    ]} 
-                  />
-                );
-              })}
+              {/* Grid lines */}
+              {yTicks.map((tick, i) => (
+                <View 
+                  key={`grid-${i}`}
+                  style={[
+                    styles.gridLine,
+                    { bottom: (i * chartHeight / yTicks.length) }
+                  ]}
+                />
+              ))}
               
-              {/* Chart area with scrolling for many bars */}
+              {/* Chart area with bars */}
               <ScrollView 
-                horizontal={needsScrolling}
+                ref={scrollViewRef}
+                horizontal={false}
                 showsHorizontalScrollIndicator={false}
-                scrollEnabled={needsScrolling} // Only enable horizontal scrolling
+                scrollEnabled={false} 
                 style={styles.scrollView}
                 contentContainerStyle={[
                   styles.scrollViewContent,
-                  { width: needsScrolling ? barContainerWidth : '100%' }
+                  { width: effectiveChartWidth }
                 ]}
               >
-                {/* Bars container */}
                 <View style={styles.barsContainer}>
                   {formattedData.map((item, index) => {
                     // Skip rendering bars for zero values
@@ -263,17 +294,14 @@ export default function BarChartCard({
                             { width: idealBarWidth }
                           ]}
                         >
-                          {/* Just render X-axis label for zero values */}
-                          <Text style={styles.xAxisLabel}>
-                            {formatXAxisLabel(item, index)}
-                          </Text>
+                          {/* Empty space for zero value */}
                         </View>
                       );
                     }
                     
-                    // Calculate height as percentage of chart height
+                    // Calculate height as percentage of FULL chart height
                     const barHeightPercent = item.value / maxValue;
-                    const barHeight = barHeightPercent * (chartHeight - 25); // Subtract padding for x-axis labels
+                    const barHeight = barHeightPercent * chartHeight;
                     const isSelected = selectedBarIndex === index;
                     
                     return (
@@ -284,6 +312,7 @@ export default function BarChartCard({
                           { width: idealBarWidth }
                         ]}
                         onPress={() => handleBarPress(index)}
+                        onLayout={(event) => handleBarLayout(index, event)}
                       >
                         {/* Actual bar with gradient */}
                         <View 
@@ -300,57 +329,86 @@ export default function BarChartCard({
                             <View style={[styles.barGradient, { backgroundColor: color }]} />
                           )}
                         </View>
-                        
-                        {/* X-axis label */}
-                        <Text style={styles.xAxisLabel}>
-                          {formatXAxisLabel(item, index)}
-                        </Text>
-                        
-                        {/* Tooltip for selected bar - positioned with absolute position */}
-                        {isSelected && (
-                          <View 
-                            style={[
-                              styles.tooltip,
-                              {
-                                // Position tooltip so it's always visible
-                                bottom: barHeight + 10,
-                                // Adjust left position to ensure it's not cut off
-                                left: index === formattedData.length - 1 ? 
-                                  'auto' : '50%',
-                                right: index === formattedData.length - 1 ? 
-                                  0 : 'auto',
-                                transform: index === formattedData.length - 1 ? 
-                                  [{ translateX: 0 }] : [{ translateX: -40 }]
-                              }
-                            ]}
-                          >
-                            <View style={styles.tooltipContent}>
-                              <View style={styles.tooltipInnerContent}>
-                                <Text style={styles.tooltipLabel}>
-                                  {formatTooltipLabel(item.label, index)}:
-                                </Text>
-                                <View style={styles.tooltipValueContainer}>
-                                  <Text style={styles.tooltipValue}>
-                                    {formatTooltipValue(item.value)}
-                                  </Text>
-                                  {yAxisSuffix && yAxisSuffix !== 'min' && (
-                                    <Text style={styles.tooltipUnit}>{yAxisSuffix}</Text>
-                                  )}
-                                </View>
-                              </View>
-                            </View>
-                            <View style={styles.tooltipArrow} />
-                          </View>
-                        )}
                       </Pressable>
                     );
                   })}
                 </View>
               </ScrollView>
             </View>
+            
+            {/* X-axis labels container */}
+            <View 
+              style={[
+                styles.xAxisLabelsWrapper, 
+                { paddingLeft: Y_AXIS_WIDTH, width: chartWidth }
+              ]}
+            >
+              <View style={{ flexDirection: 'row', width: effectiveChartWidth }}>
+                {formattedData.map((item, index) => {
+                  // For 14D period, expand label width when displayed
+                  const is14DDisplayedLabel = period === '14D' && item.displayLabel === true;
+                  
+                  return (
+                    <View 
+                      key={`x-label-${index}`}
+                      style={[
+                        styles.xAxisLabelContainer, 
+                        { 
+                          width: idealBarWidth,
+                          // Apply expanded width for visible 14D labels
+                          ...(is14DDisplayedLabel && { overflow: 'visible' })
+                        }
+                      ]}
+                    >
+                      <Text 
+                        style={[
+                          styles.xAxisLabel,
+                          // Make 14D displayed labels wider
+                          is14DDisplayedLabel && { width: idealBarWidth * 3 }
+                        ]}
+                      >
+                        {formatXAxisLabel(item, index)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
           </View>
         </View>
       </View>
+      
+      {/* Tooltip rendered outside chart - with improved positioning */}
+      {selectedBarIndex !== null && barLayouts[selectedBarIndex] && (
+        <View 
+          style={[
+            styles.tooltip,
+            {
+              position: 'absolute',
+              // Add Y_AXIS_WIDTH to account for the Y-axis space
+              left: Y_AXIS_WIDTH + (barLayouts[selectedBarIndex]?.x || 0) + (idealBarWidth / 2) - (TOOLTIP_WIDTH / 2),
+              top: chartContainerHeight - (((formattedData[selectedBarIndex]?.value || 0) / maxValue) * chartHeight) - 52,
+            }
+          ]}
+        >
+          <View style={styles.tooltipContent}>
+            <View style={styles.tooltipInnerContent}>
+              <Text style={styles.tooltipLabel}>
+                {formatTooltipLabel(formattedData[selectedBarIndex]?.label || '', selectedBarIndex)}:
+              </Text>
+              <View style={styles.tooltipValueContainer}>
+                <Text style={styles.tooltipValue}>
+                  {formatTooltipValue(formattedData[selectedBarIndex]?.value || 0)}
+                </Text>
+                {yAxisSuffix && yAxisSuffix !== 'min' && (
+                  <Text style={styles.tooltipUnit}>{yAxisSuffix}</Text>
+                )}
+              </View>
+            </View>
+          </View>
+          <View style={styles.tooltipArrow} />
+        </View>
+      )}
     </ChartCard>
   );
 }
@@ -483,13 +541,17 @@ const styles = StyleSheet.create({
   chartWrapper: {
     flex: 1,
     width: '100%',
+    overflow: 'visible', // Allow children to overflow the container
+    zIndex: 1, // Ensure proper stacking
+    elevation: 1, // Add elevation for Android
+    position: 'relative', // Needed for absolute positioning of tooltip
   },
   spacer: {
     height: 20, // Extra space between metrics and chart
   },
   chartContainer: {
     position: 'relative',
-    height: 220, // Reduced height
+    // Height is now dynamic based on chartContainerHeight variable
   },
   emptyStateContainer: {
     flex: 1,
@@ -502,12 +564,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
   },
+  chartContentWrapper: {
+    overflow: 'visible', // Allow tooltips to overflow
+    zIndex: 1, // Ensure proper stacking
+  },
   chartContent: {
     flex: 1,
     flexDirection: 'row',
     position: 'relative',
-    paddingLeft: 50, // Space for Y-axis labels
-    height: 180, // Adjusted height
+    paddingLeft: Y_AXIS_WIDTH, // Space for Y-axis labels
+    height: 180, // Chart content area height only
+    overflow: 'visible', // Allow tooltip to overflow
+    zIndex: 1, // Ensure proper stacking context
   },
   yAxisLabels: {
     position: 'absolute',
@@ -542,25 +610,29 @@ const styles = StyleSheet.create({
   scrollViewContent: {
     flexGrow: 1,
     height: '100%', // Ensure no vertical scrolling
+    // paddingBottom removed
   },
   barsContainer: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: '100%',
-    paddingBottom: 25, // Space for X-axis labels
+    alignItems: 'flex-end', // This ensures bars align with bottom (origin)
+    height: '100%', 
+    // No paddingBottom - important for proper alignment with grid lines
   },
   barWrapper: {
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'flex-end',
     height: '100%',
     position: 'relative',
+    overflow: 'visible', // Allow tooltip to overflow
   },
   bar: {
     width: '80%',
     borderTopLeftRadius: 5,
     borderTopRightRadius: 5,
+    position: 'absolute',
+    bottom: 0,
+    zIndex: 1, // Lower than tooltip
   },
   barGradient: {
     position: 'absolute',
@@ -575,24 +647,39 @@ const styles = StyleSheet.create({
     borderTopWidth: 5,
     borderTopColor: 'rgba(255, 255, 255, 0.3)',
   },
+  xAxisLabelsWrapper: {
+    height: 25,
+    flexDirection: 'row',
+    marginTop: 5, // Space between chart content and labels
+  },
+  xAxisLabelContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   xAxisLabel: {
     color: 'rgba(94, 234, 212, 1)',
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    marginTop: 5,
     textAlign: 'center',
-    width: '100%',
   },
   tooltip: {
     position: 'absolute',
-    zIndex: 100, // Much higher z-index to ensure visibility
+    zIndex: 9999, // Extremely high z-index to ensure it's above everything
     width: 80, // Fixed width for consistent look
+    elevation: 10, // Higher elevation for Android
+    shadowColor: '#000', // Add shadow for iOS
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    pointerEvents: 'box-none', // Allow touches to pass through to elements below
   },
   tooltipContent: {
     backgroundColor: '#115e59',
     borderRadius: 8,
     padding: 8,
     width: '100%',
+    overflow: 'visible',
+    zIndex: 9999, // Ensure the content also has high z-index
   },
   tooltipInnerContent: {
     flexDirection: 'row',
@@ -612,6 +699,7 @@ const styles = StyleSheet.create({
     borderRightColor: 'transparent',
     borderTopColor: '#115e59',
     alignSelf: 'center',
+    zIndex: 9999, // Ensure arrow has high z-index too
   },
   tooltipLabel: {
     color: '#5eead4',
