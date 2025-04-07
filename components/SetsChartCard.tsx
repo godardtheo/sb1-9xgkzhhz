@@ -229,7 +229,7 @@ export default function SetsChartCard({ period }: SetsChartCardProps) {
         ]}
         yAxisLabel=""
         yAxisSuffix=""
-        color="#0d9488" // Slightly different teal shade
+        color="#14b8a6" // Changed to match WorkoutsDurationChartCard
         emptyStateMessage="No sets data available for this period. Complete some workout sets to see statistics!"
       />
     );
@@ -243,7 +243,7 @@ export default function SetsChartCard({ period }: SetsChartCardProps) {
       metrics={metrics}
       yAxisLabel=""
       yAxisSuffix=""
-      color="#0d9488" // Slightly different teal shade
+      color="#14b8a6" // Changed to match WorkoutsDurationChartCard
       yAxisLabelXOffset={32}
       formatYLabel={formatYAxis}
       segments={segments}

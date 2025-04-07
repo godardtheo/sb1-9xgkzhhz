@@ -261,7 +261,7 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
         ]}
         yAxisLabel=""
         yAxisSuffix=""
-        color="#0d9488" // Same teal color as SetsChartCard
+        color="#14b8a6" // Changed to match WorkoutsDurationChartCard
         emptyStateMessage="No weight data available for this period. Complete some workouts with weights to see statistics!"
       />
     );
@@ -275,7 +275,7 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
       metrics={metrics}
       yAxisLabel=""
       yAxisSuffix=""
-      color="#0d9488" // Same teal color as SetsChartCard
+      color="#14b8a6" // Changed to match WorkoutsDurationChartCard
       yAxisLabelXOffset={32}
       formatYLabel={formatYAxis}
       segments={segments}
