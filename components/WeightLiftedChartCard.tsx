@@ -279,6 +279,7 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
       yAxisLabelXOffset={32}
       formatYLabel={formatYAxis}
       segments={segments}
+      tooltipValueSuffix={weightUnit}
     />
   );
 }

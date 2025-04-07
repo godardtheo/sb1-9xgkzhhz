@@ -247,6 +247,7 @@ export default function SetsChartCard({ period }: SetsChartCardProps) {
       yAxisLabelXOffset={32}
       formatYLabel={formatYAxis}
       segments={segments}
+      tooltipValueSuffix="sets"
     />
   );
 } 
