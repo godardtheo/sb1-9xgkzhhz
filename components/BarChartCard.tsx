@@ -33,6 +33,9 @@ const Y_AXIS_WIDTH = 50; // Space for Y-axis labels
 // Constants for tooltip sizing
 const TOOLTIP_WIDTH = 80; // Match the fixed width defined in styles.tooltip
 
+// Standardize default color for all charts
+const DEFAULT_BAR_COLOR = '#14b8a6'; // Teal color
+
 export default function BarChartCard({ 
   title, 
   metrics, 
@@ -40,7 +43,7 @@ export default function BarChartCard({
   period, 
   yAxisSuffix = '',
   yAxisLabel = '',
-  color = '#14b8a6',
+  color = DEFAULT_BAR_COLOR, // Use the standardized color as default
   emptyStateMessage,
   formatYLabel = (yValue) => yValue,
   yAxisLabelXOffset,
@@ -92,22 +95,58 @@ export default function BarChartCard({
     return formatted;
   }, [fullRangeData, period]);
   
-  // Calculate max value for Y axis scaling
+  // 1. Domain-Specific Y-Axis Scaling: Calculate optimal max value based on data type
   const maxValue = useMemo(() => {
     const max = Math.max(...formattedData.map(item => item.value), 1);
-    // Round up to nice number based on magnitude
-    if (max <= 10) return Math.ceil(max * 1.2); // Small values, round to nearest 1
-    if (max <= 100) return Math.ceil(max * 1.1 / 5) * 5; // Medium values, round to nearest 5
-    return Math.ceil(max * 1.1 / 10) * 10; // Large values, round to nearest 10
-  }, [formattedData]);
+    
+    // For time values (minutes)
+    if (yAxisSuffix === 'min') {
+      // For durations, use multiples of 15min or 30min that make sense
+      if (max <= 30) return Math.ceil(max / 15) * 15;        // 15min increments
+      if (max <= 120) return Math.ceil(max / 30) * 30;       // 30min increments
+      return Math.ceil(max / 60) * 60;                       // 1hr increments
+    }
+    
+    // For sets or other integer values, use clean intervals
+    if (max <= 5) return 5;                                 // 0-5 range
+    if (max <= 10) return 10;                               // 0-10 range
+    if (max <= 20) return Math.ceil(max / 5) * 5;           // Multiples of 5
+    if (max <= 100) return Math.ceil(max / 10) * 10;        // Multiples of 10
+    return Math.ceil(max / 50) * 50;                        // Multiples of 50
+  }, [formattedData, yAxisSuffix]);
   
-  // Generate Y axis tick values
-  const yTicks = useMemo(() => {
-    // Use the smaller of segments or MAX_SEGMENTS
-    const tickCount = Math.min(segments, MAX_SEGMENTS);
-    const interval = maxValue / tickCount;
-    return Array.from({ length: tickCount + 1 }, (_, i) => i * interval);
+  // 2. Adaptive Segment Count: Adjust number of segments based on data range
+  const segmentCount = useMemo(() => {
+    // For small max values, fewer segments look better
+    if (maxValue <= 5) return 5;
+    if (maxValue <= 20) return Math.ceil(maxValue / 5);     // For 15, create 3 segments
+    // For larger values, use default but ensure appropriate density
+    return Math.min(segments, MAX_SEGMENTS);
   }, [maxValue, segments, MAX_SEGMENTS]);
+  
+  // 3. Generate Clean, Even Intervals: Create visually appealing tick marks
+  const { yTicks, adjustedMax } = useMemo(() => {
+    // Calculate interval and ensure it's a clean number
+    let interval = maxValue / segmentCount;
+    
+    // If interval is not an integer, round to next nice number
+    if (interval !== Math.floor(interval)) {
+      if (interval < 1) interval = 1;
+      else if (interval < 5) interval = Math.ceil(interval);
+      else interval = Math.ceil(interval / 5) * 5;
+    }
+    
+    // Recalculate max value to ensure it's divisible by interval
+    const adjustedMax = Math.ceil(maxValue / interval) * interval;
+    
+    // Generate ticks from 0 to adjusted max
+    const ticks = Array.from(
+      { length: Math.floor(adjustedMax / interval) + 1 }, 
+      (_, i) => i * interval
+    );
+    
+    return { yTicks: ticks, adjustedMax };
+  }, [maxValue, segmentCount]);
   
   // Initialize bar layouts array
   useEffect(() => {
@@ -246,8 +285,9 @@ export default function BarChartCard({
                   style={[
                     styles.yAxisLabel,
                     { 
-                      bottom: (i * chartHeight / yTicks.length),
-                      transform: [{ translateY: -32 }]
+                      bottom: (tick / adjustedMax) * chartHeight + 28,
+                      height: 20,
+                      lineHeight: 20
                     }
                   ]}
                 >
@@ -265,7 +305,9 @@ export default function BarChartCard({
                   key={`grid-${i}`}
                   style={[
                     styles.gridLine,
-                    { bottom: (i * chartHeight / yTicks.length) }
+                    { 
+                      bottom: (tick / adjustedMax) * chartHeight
+                    }
                   ]}
                 />
               ))}
@@ -299,8 +341,8 @@ export default function BarChartCard({
                       );
                     }
                     
-                    // Calculate height as percentage of FULL chart height
-                    const barHeightPercent = item.value / maxValue;
+                    // Calculate height using adjustedMax instead of maxValue
+                    const barHeightPercent = item.value / adjustedMax;
                     const barHeight = barHeightPercent * chartHeight;
                     const isSelected = selectedBarIndex === index;
                     
@@ -321,13 +363,10 @@ export default function BarChartCard({
                             { 
                               height: Math.max(barHeight, 5),
                               backgroundColor: isSelected ? '#FF90B3' : color,
-                              overflow: 'hidden'
                             }
                           ]}
                         >
-                          {!isSelected && (
-                            <View style={[styles.barGradient, { backgroundColor: color }]} />
-                          )}
+                          {/* Remove the gradient view completely */}
                         </View>
                       </Pressable>
                     );
@@ -387,7 +426,7 @@ export default function BarChartCard({
               position: 'absolute',
               // Add Y_AXIS_WIDTH to account for the Y-axis space
               left: Y_AXIS_WIDTH + (barLayouts[selectedBarIndex]?.x || 0) + (idealBarWidth / 2) - (TOOLTIP_WIDTH / 2),
-              top: chartContainerHeight - (((formattedData[selectedBarIndex]?.value || 0) / maxValue) * chartHeight) - 52,
+              top: chartContainerHeight - (((formattedData[selectedBarIndex]?.value || 0) / adjustedMax) * chartHeight) - 52,
             }
           ]}
         >
@@ -636,16 +675,9 @@ const styles = StyleSheet.create({
   },
   barGradient: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    height: '100%',
+    width: '100%',
     opacity: 0.7,
-    borderTopLeftRadius: 5,
-    borderTopRightRadius: 5,
-    // Gradient effect
-    borderTopWidth: 5,
-    borderTopColor: 'rgba(255, 255, 255, 0.3)',
   },
   xAxisLabelsWrapper: {
     height: 25,
