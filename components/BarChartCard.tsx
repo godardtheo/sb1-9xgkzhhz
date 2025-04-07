@@ -25,13 +25,14 @@ interface BarChartCardProps extends Omit<ChartCardProps, 'children'> {
   formatYLabel?: (yValue: string) => string;
   yAxisLabelXOffset?: number;
   segments?: number;
+  tooltipValueSuffix?: string;
 }
 
 // Fix Y_AXIS_WIDTH reference by moving it outside of the component
 const Y_AXIS_WIDTH = 50; // Space for Y-axis labels
 
-// Constants for tooltip sizing
-const TOOLTIP_WIDTH = 80; // Match the fixed width defined in styles.tooltip
+// Constants for tooltip sizing - set a default but allow expansion
+const DEFAULT_TOOLTIP_WIDTH = 60; // Increased from 80 to accommodate more content
 
 // Standardize default color for all charts
 const DEFAULT_BAR_COLOR = '#14b8a6'; // Teal color
@@ -47,7 +48,8 @@ export default function BarChartCard({
   emptyStateMessage,
   formatYLabel = (yValue) => yValue,
   yAxisLabelXOffset,
-  segments = 4
+  segments = 4,
+  tooltipValueSuffix
 }: BarChartCardProps) {
   const { width } = useWindowDimensions();
   const chartWidth = width - 80; // Preserve the existing width setting
@@ -63,6 +65,9 @@ export default function BarChartCard({
   const scrollViewRef = useRef<ScrollView>(null);
   const labelScrollViewRef = useRef<ScrollView>(null);
   const [scrollX, setScrollX] = useState(0);
+  
+  // Add state to track tooltip width for adaptive sizing
+  const [tooltipWidth, setTooltipWidth] = useState(DEFAULT_TOOLTIP_WIDTH);
   
   // Reset selected bar when period changes
   useEffect(() => {
@@ -241,14 +246,19 @@ export default function BarChartCard({
   
   // Format tooltip value
   const formatTooltipValue = (value: number): string => {
-    if (yAxisSuffix === 'min') {
-      // Format minutes with hours if >= 60
-      if (value >= 60) {
-        const hours = Math.floor(value / 60);
-        const mins = Math.round(value % 60);
-        return `${hours}h ${mins}m`;
-      }
-      return `${value}min`;
+    // Special handling for WorkoutsDurationChartCard (title === "Workouts")
+    if (title === "Workouts") {
+      // Format minutes as h:mm format (matching y-axis labels)
+      const hours = Math.floor(value / 60);
+      const mins = Math.round(value % 60);
+      return `${hours}:${mins.toString().padStart(2, '0')}`;
+    }
+    // Original handling for other yAxisSuffix cases
+    else if (yAxisSuffix === 'min') {
+      // Format minutes as h:mm format (matching y-axis labels)
+      const hours = Math.floor(value / 60);
+      const mins = Math.round(value % 60);
+      return `${hours}:${mins.toString().padStart(2, '0')}`;
     }
     return value.toString();
   };
@@ -425,10 +435,18 @@ export default function BarChartCard({
             {
               position: 'absolute',
               // Add Y_AXIS_WIDTH to account for the Y-axis space
-              left: Y_AXIS_WIDTH + (barLayouts[selectedBarIndex]?.x || 0) + (idealBarWidth / 2) - (TOOLTIP_WIDTH / 2),
+              left: Y_AXIS_WIDTH + (barLayouts[selectedBarIndex]?.x || 0) + (idealBarWidth / 2) - (tooltipWidth / 2),
               top: chartContainerHeight - (((formattedData[selectedBarIndex]?.value || 0) / adjustedMax) * chartHeight) - 52,
+              minWidth: tooltipWidth, // Use measured or default width
             }
           ]}
+          onLayout={(e) => {
+            // Measure the actual content width and update if needed
+            const {width} = e.nativeEvent.layout;
+            if (width > tooltipWidth && width > DEFAULT_TOOLTIP_WIDTH) {
+              setTooltipWidth(width);
+            }
+          }}
         >
           <View style={styles.tooltipContent}>
             <View style={styles.tooltipInnerContent}>
@@ -439,7 +457,12 @@ export default function BarChartCard({
                 <Text style={styles.tooltipValue}>
                   {formatTooltipValue(formattedData[selectedBarIndex]?.value || 0)}
                 </Text>
-                {yAxisSuffix && yAxisSuffix !== 'min' && (
+                {/* Dynamic unit display based on context */}
+                {tooltipValueSuffix && (
+                  <Text style={styles.tooltipUnit}>{tooltipValueSuffix}</Text>
+                )}
+                {/* Keep existing suffix for min but only if not using the new formatting */}
+                {!tooltipValueSuffix && yAxisSuffix && yAxisSuffix !== 'min' && (
                   <Text style={styles.tooltipUnit}>{yAxisSuffix}</Text>
                 )}
               </View>
@@ -697,7 +720,10 @@ const styles = StyleSheet.create({
   tooltip: {
     position: 'absolute',
     zIndex: 9999, // Extremely high z-index to ensure it's above everything
-    width: 80, // Fixed width for consistent look
+    // Remove fixed width
+    // width: 80, // Fixed width for consistent look
+    minWidth: DEFAULT_TOOLTIP_WIDTH, // Minimum width
+    paddingHorizontal: 0, // No horizontal padding on the container
     elevation: 10, // Higher elevation for Android
     shadowColor: '#000', // Add shadow for iOS
     shadowOffset: { width: 0, height: 2 },
@@ -708,7 +734,7 @@ const styles = StyleSheet.create({
   tooltipContent: {
     backgroundColor: '#115e59',
     borderRadius: 8,
-    padding: 8,
+    padding: 8, // Equal padding on all sides
     width: '100%',
     overflow: 'visible',
     zIndex: 9999, // Ensure the content also has high z-index
@@ -717,6 +743,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
+    flexWrap: 'wrap', // Allow wrapping if needed
   },
   tooltipArrow: {
     width: 0,
@@ -742,6 +769,7 @@ const styles = StyleSheet.create({
   tooltipValueContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexWrap: 'nowrap', // Prevent wrapping between value and unit
   },
   tooltipValue: {
     color: '#ffffff',
@@ -750,8 +778,8 @@ const styles = StyleSheet.create({
   },
   tooltipUnit: {
     color: '#ffffff',
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
+    fontSize: 10, // Smaller than the value
+    fontFamily: 'Inter-Regular', // Less emphasis than the value
     marginLeft: 2,
   },
 }); 
