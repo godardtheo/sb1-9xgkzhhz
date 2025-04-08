@@ -1,23 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import TimeFilter, { TimePeriod } from '../../components/TimeFilter';
-import PieChartCard from '../../components/PieChartCard';
 import BarChartCard from '../../components/BarChartCard';
 import WorkoutsDurationChartCard from '../../components/WorkoutsDurationChartCard';
 import SetsChartCard from '../../components/SetsChartCard';
 import WeightLiftedChartCard from '../../components/WeightLiftedChartCard';
+import MuscularDistributionChartCard from '../../components/MuscularDistributionChartCard';
 
 export default function StatisticsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('7D');
-
-  // Sample data for muscle breakdown pie chart
-  const muscleData = [
-    { name: 'Chest', value: 25, color: '#14b8a6' },
-    { name: 'Back', value: 30, color: '#0d9488' },
-    { name: 'Legs', value: 20, color: '#0f766e' },
-    { name: 'Shoulders', value: 15, color: '#115e59' },
-    { name: 'Arms', value: 10, color: '#134e4a' },
-  ];
 
   return (
     <View style={styles.container}>
@@ -38,16 +29,9 @@ export default function StatisticsScreen() {
         
         <SetsChartCard period={selectedPeriod} />
         
-        <WeightLiftedChartCard period={selectedPeriod} />
+        <MuscularDistributionChartCard period={selectedPeriod} />
         
-        <PieChartCard
-          title="Muscle Breakdown"
-          metrics={[
-            { label: 'Total Sets', value: '156' },
-            { label: 'Most Trained', value: 'Back' },
-          ]}
-          data={muscleData}
-        />
+        <WeightLiftedChartCard period={selectedPeriod} />
       </ScrollView>
     </View>
   );
