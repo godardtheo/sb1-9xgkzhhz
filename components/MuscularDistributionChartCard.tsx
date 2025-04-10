@@ -13,7 +13,7 @@ interface Workout {
 
 // Define the structure that matches the actual data returned from Supabase
 interface WorkoutExerciseData {
-  workout_id: string;
+  parent_workout_id: string;
   sets: number;
   exercise: {
     muscle: string;
@@ -201,13 +201,13 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
         const { data: exercisesData, error: exercisesError } = await supabase
           .from('workout_exercises')
           .select(`
-            workout_id,
+            parent_workout_id,
             sets,
             exercise:exercise_id (
               muscle
             )
           `)
-          .in('workout_id', workoutIds);
+          .in('parent_workout_id', workoutIds);
         
         if (exercisesError) {
           throw exercisesError;
