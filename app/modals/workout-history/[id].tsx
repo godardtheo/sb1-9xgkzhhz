@@ -69,8 +69,8 @@ export default function WorkoutDetailModal() {
       // Get exercises for this workout (without the relationship that's causing issues)
       const { data: workoutExercises, error: exercisesError } = await supabase
         .from('workout_exercises')
-        .select('id, exercise_id, workout_id')
-        .eq('workout_id', id);
+        .select('id, exercise_id, parent_workout_id')
+        .eq('parent_workout_id', id);
       
       if (exercisesError) {
         console.error('Error fetching workout exercises:', exercisesError);
@@ -180,7 +180,7 @@ export default function WorkoutDetailModal() {
       const { data: workoutExercises, error: exercisesError } = await supabase
         .from('workout_exercises')
         .select('id')
-        .eq('workout_id', id);
+        .eq('parent_workout_id', id);
       
       if (exercisesError) {
         console.error('Error fetching workout exercises for deletion:', exercisesError);
@@ -214,7 +214,7 @@ export default function WorkoutDetailModal() {
         const { error: exercisesDeleteError } = await supabase
           .from('workout_exercises')
           .delete()
-          .eq('workout_id', id);
+          .eq('parent_workout_id', id);
         
         if (exercisesDeleteError) {
           console.error('Error deleting workout exercises:', exercisesDeleteError);
