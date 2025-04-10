@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+// Import the crypto polyfill before anything else
+// We no longer need the crypto polyfill since we're using react-native-uuid
+import React, { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
