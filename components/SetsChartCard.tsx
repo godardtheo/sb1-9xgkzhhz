@@ -14,7 +14,7 @@ interface Workout {
 
 interface WorkoutExercise {
   id: string;
-  workout_id: string;
+  parent_workout_id: string;
   sets: number;
 }
 
@@ -103,8 +103,8 @@ export default function SetsChartCard({ period }: SetsChartCardProps) {
         // Query workout exercises to get sets information
         const { data: exercisesData, error: exercisesError } = await supabase
           .from('workout_exercises')
-          .select('workout_id, sets')
-          .in('workout_id', workoutIds);
+          .select('parent_workout_id, sets')
+          .in('parent_workout_id', workoutIds);
         
         if (exercisesError) {
           throw exercisesError;
@@ -113,7 +113,7 @@ export default function SetsChartCard({ period }: SetsChartCardProps) {
         // Calculate total sets per workout
         const workoutsWithSetCounts: WorkoutWithSets[] = workoutsData.map(workout => {
           // Filter exercises for this workout
-          const workoutExercises = exercisesData?.filter(ex => ex.workout_id === workout.id) || [];
+          const workoutExercises = exercisesData?.filter(ex => ex.parent_workout_id === workout.id) || [];
           
           // Sum up the sets
           const totalSets = workoutExercises.reduce((sum, exercise) => {
