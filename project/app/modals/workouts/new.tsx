@@ -11,6 +11,7 @@ import { useWorkoutStore } from '@/lib/store/workoutStore';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useExerciseReorder } from '@/hooks/useExerciseReorder';
 import DraggableExerciseCard from '@/components/DraggableExerciseCard';
+import uuid from 'react-native-uuid';
 
 type Exercise = {
   id: string;
@@ -68,7 +69,7 @@ export default function NewWorkoutScreen() {
     const newExercises = selectedExercises.map(exercise => ({
       ...exercise,
       sets: Array(4).fill(null).map(() => ({
-        id: crypto.randomUUID(),
+        id: uuid.v4(),
         minReps: '6',
         maxReps: '12'
       }))
@@ -182,7 +183,7 @@ export default function NewWorkoutScreen() {
       if (ex.id === exerciseId) {
         return {
           ...ex,
-          sets: [...ex.sets, { id: crypto.randomUUID(), minReps: '6', maxReps: '12' }]
+          sets: [...ex.sets, { id: uuid.v4(), minReps: '6', maxReps: '12' }]
         };
       }
       return ex;

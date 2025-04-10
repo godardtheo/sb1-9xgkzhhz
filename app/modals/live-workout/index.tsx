@@ -311,9 +311,7 @@ export default function LiveWorkoutScreen() {
       const { data: workoutExercises, error: workoutError } = await supabase
         .from('workout_exercises')
         .select(`
-          id,
-          workout_id,
-          workouts!inner (date)
+          id
         `)
         .eq('exercise_id', exerciseId)
         .eq('workouts.user_id', userProfile.id)
@@ -435,6 +433,7 @@ export default function LiveWorkoutScreen() {
 
     try {
       setIsSaving(true);
+      console.log('Starting workout save process...');
 
       // Stop timers
       if (displayTimerRef.current) clearInterval(displayTimerRef.current);
@@ -445,60 +444,66 @@ export default function LiveWorkoutScreen() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Create workout record
-      const { data: workout, error: workoutError } = await supabase
-        .from('workouts')
-        .insert({
-          user_id: user.id,
-          name: workoutName,
-          date: new Date().toISOString(),
-          duration: `${Math.floor(displayDuration / 60)} minutes`,
-          notes: '',
-        })
-        .select()
-        .single();
+      // Step 1: Create the workout
+      console.log('Creating workout record...');
+      const { data: workoutId, error: workoutError } = await supabase.rpc(
+        'create_workout',
+        {
+          p_user_id: user.id,
+          p_name: workoutName,
+          p_date: new Date().toISOString(),
+          p_duration: `${Math.floor(displayDuration / 60)} minutes`,
+          p_notes: ''
+        }
+      );
 
       if (workoutError) throw workoutError;
+      console.log('Workout created with ID:', workoutId);
 
-      // Save each exercise and its sets
+      // Step 2: Process each exercise
       for (const [index, exercise] of exercises.entries()) {
         // Only save exercises that have at least one completed set
-        if (exercise.sets.some((set) => set.completed)) {
-          // Create workout exercise record
-          const { data: workoutExercise, error: exerciseError } = await supabase
-            .from('workout_exercises')
-            .insert({
-              workout_id: workout.id,
+        const completedSets = exercise.sets.filter(set => set.completed);
+        
+        if (completedSets.length > 0) {
+          console.log(`Processing exercise ${index + 1}/${exercises.length}: ${exercise.name}`);
+          
+          // Create workout exercise
+          const { data: workoutExerciseId, error: exerciseError } = await supabase.rpc(
+            'create_workout_exercise',
+            {
+              parent_workout_id: workoutId,
               exercise_id: exercise.id,
-              sets: exercise.sets.filter((set) => set.completed).length,
-              order: index,
-            })
-            .select()
-            .single();
+              sets: completedSets.length,
+              exercise_order: index
+            }
+          );
 
           if (exerciseError) throw exerciseError;
+          console.log('Workout exercise created with ID:', workoutExerciseId);
 
-          // Save completed sets
-          const setsToSave = exercise.sets
-            .filter((set) => set.completed)
-            .map((set, setIndex) => ({
-              workout_exercise_id: workoutExercise.id,
-              rep_count: parseFloat(set.reps) || 0, // Parse as float to support decimal reps
-              weight: parseFloat(set.weight) || 0,
-              completed_at: new Date().toISOString(),
-              set_order: setIndex,
-            }));
+          // Step 3: Save the sets
+          const setsData = completedSets.map((set, setIndex) => ({
+            reps: set.reps,
+            weight: set.weight,
+            order: setIndex
+          }));
 
-          if (setsToSave.length > 0) {
-            const { error: setsError } = await supabase
-              .from('sets')
-              .insert(setsToSave);
+          const { data: setsResult, error: setsError } = await supabase.rpc(
+            'create_workout_sets',
+            {
+              p_workout_exercise_id: workoutExerciseId,
+              p_sets: setsData
+            }
+          );
 
-            if (setsError) throw setsError;
-          }
+          if (setsError) throw setsError;
+          console.log(`Saved ${completedSets.length} sets for exercise`);
         }
       }
 
+      console.log('Workout saved successfully!');
+      
       setIsWorkoutFinished(true);
       // End the workout in global state
       workoutProgress.endWorkout();
