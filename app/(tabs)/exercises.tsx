@@ -12,6 +12,10 @@ type Exercise = {
   muscle: string;
   equipment: string;
   is_favorite?: boolean;
+  instructions?: string;
+  video_url?: string;
+  type?: string;
+  difficulty?: string;
 };
 
 export default function ExercisesScreen() {
@@ -194,12 +198,8 @@ export default function ExercisesScreen() {
   }, [selectedCategory]);
 
   const handleExercisePress = (exercise: Exercise) => {
-    // Navigation to exercise details will be implemented later
-    console.log('Exercise pressed:', exercise.name);
-    // router.push({
-    //   pathname: '/exercise/[id]',
-    //   params: { id: exercise.id }
-    // });
+    // Navigate to the exercise details screen instead of showing modal
+    router.push(`/modals/exercise-details/${exercise.id}`);
   };
 
   const handleAddExercise = () => {
@@ -345,8 +345,6 @@ export default function ExercisesScreen() {
           ListEmptyComponent={renderEmptyState}
         />
       )}
-
-      
     </View>
   );
 }
@@ -464,24 +462,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     textAlign: 'center',
-  },
-  addButton: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#14b8a6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
 }); 
