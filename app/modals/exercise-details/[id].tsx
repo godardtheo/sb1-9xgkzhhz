@@ -45,15 +45,15 @@ export default function ExerciseDetailsScreen() {
         return;
       }
 
-      // Get user profile info
+      // Get user weight unit from the users table
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('users')
         .select('weight_unit')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
       
       if (error) {
-        console.error('Error fetching user profile:', error);
+        console.error('Error fetching user weight unit:', error);
         return;
       }
 
