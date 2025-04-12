@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Dashboard, ChartBar as Statistics, CircleUser as UserProfile, Plus } from 'lucide-react-native';
+import { Chrome as Dashboard, ChartBar as Statistics, CircleUser as UserProfile, Plus, Dumbbell as Exercises } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
 import ResumeTrainingButton from '@/components/ResumeTrainingButton';
 import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
@@ -36,6 +36,16 @@ export default function TabLayout() {
             tabBarIcon: ({ color, size }) => (
               <View style={styles.iconContainer}>
                 <Statistics size={24} color={color} strokeWidth={2.5} />
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="exercises"
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <View style={styles.iconContainer}>
+                <Exercises size={24} color={color} strokeWidth={2.5} />
               </View>
             ),
           }}
