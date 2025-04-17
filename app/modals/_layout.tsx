@@ -6,6 +6,7 @@ export default function ModalsLayout() {
       <Stack.Screen name="programs" />
       <Stack.Screen name="workouts" />
       <Stack.Screen name="workout-history" />
+      <Stack.Screen name="body-weight" />
     </Stack>
   );
 }

@@ -1,16 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, AppState } from 'react-native';
 import { Scale } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { getLatestWeight } from '@/lib/weightUtils';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 export default function LogWeightCard() {
   const [latestWeight, setLatestWeight] = useState<number | null>(null);
   const router = useRouter();
+  const [appState, setAppState] = useState(AppState.currentState);
 
+  // Fetch latest weight when component mounts
   useEffect(() => {
     fetchLatestWeight();
-  }, []);
+
+    // Set up AppState listener to refresh when app comes back to foreground
+    const subscription = AppState.addEventListener("change", nextAppState => {
+      if (appState.match(/inactive|background/) && nextAppState === "active") {
+        // App has come to the foreground
+        fetchLatestWeight();
+      }
+      setAppState(nextAppState);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [appState]);
+
+  // Refresh when screen gains focus (e.g. after returning from body-weight modal)
+  useFocusEffect(
+    useCallback(() => {
+      fetchLatestWeight();
+    }, [])
+  );
 
   const fetchLatestWeight = async () => {
     try {
@@ -22,8 +46,7 @@ export default function LogWeightCard() {
   };
 
   const handlePress = () => {
-    // TODO: Navigate to LogWeightModal when implemented
-    alert('LogWeightModal will be implemented later');
+    router.push('/modals/body-weight');
   };
 
   return (
