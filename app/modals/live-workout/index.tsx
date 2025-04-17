@@ -894,7 +894,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 24 : 24,
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: '#021a19',
