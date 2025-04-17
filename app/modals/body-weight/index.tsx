@@ -273,67 +273,6 @@ export default function BodyWeightPage() {
           weightData={weightData}
           onEntryPress={handlePointPress}
         />
-        
-        {/* Weight trend chart centered around selected date */}
-        <View style={styles.chartContainer}>
-          <Text style={styles.chartTitle}>30-Day Trend</Text>
-          
-          {/* Simple chart representation since we're having TypeScript issues with Victory */}
-          <View style={styles.simpleChartContainer}>
-            {weightData.length > 0 && (
-              <>
-                <View style={styles.chartLabels}>
-                  <Text style={styles.axisLabel}>
-                    {new Date(weightData[0].date).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric' 
-                    })}
-                  </Text>
-                  <Text style={styles.axisLabel}>
-                    {new Date(weightData[weightData.length - 1].date).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric' 
-                    })}
-                  </Text>
-                </View>
-                
-                <View style={styles.chartVisualization}>
-                  {/* Weight point for the selected entry */}
-                  <View style={[
-                    styles.dataPoint, 
-                    {
-                      backgroundColor: '#5eead4',
-                      borderColor: '#f0fdfa',
-                      width: 16,
-                      height: 16,
-                      borderWidth: 2,
-                    }
-                  ]}>
-                    <Text style={styles.pointLabel}>{selectedEntry?.weight.toFixed(1)}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.chartInfo}>
-                  <Text style={styles.chartInfoText}>
-                    Selected: {new Date(selectedEntry?.date || '').toLocaleDateString('en-US', { 
-                      month: 'long', 
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </Text>
-                  <Text style={styles.chartInfoText}>
-                    Weight: {selectedEntry?.weight.toFixed(1)} kg
-                  </Text>
-                  {selectedEntry?.notes ? (
-                    <Text style={styles.chartInfoText}>
-                      Notes: {selectedEntry.notes}
-                    </Text>
-                  ) : null}
-                </View>
-              </>
-            )}
-          </View>
-        </View>
       </ScrollView>
       
       {/* Legacy Add Weight Modal - Keep this until the new modal is fully implemented */}
@@ -672,20 +611,6 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 5,
   },
-  chartContainer: {
-    marginTop: 20,
-    marginBottom: 10,
-    backgroundColor: '#042f2e',
-    borderRadius: 8,
-    padding: 10,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#5eead4',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
   actionButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -711,50 +636,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
     fontSize: 14,
-  },
-  simpleChartContainer: {
-    backgroundColor: '#042f2e',
-    borderRadius: 8,
-    padding: 16,
-    minHeight: 180,
-  },
-  chartLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  axisLabel: {
-    color: '#5eead4',
-    fontSize: 10,
-  },
-  chartVisualization: {
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dataPoint: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#0d9488',
-    position: 'relative',
-  },
-  pointLabel: {
-    color: '#f0fdfa',
-    fontSize: 10,
-    position: 'absolute',
-    top: -16,
-    left: -10,
-  },
-  chartInfo: {
-    marginTop: 16,
-    padding: 8,
-    backgroundColor: 'rgba(13, 148, 136, 0.2)',
-    borderRadius: 4,
-  },
-  chartInfoText: {
-    color: '#ccfbf1',
-    fontSize: 12,
-    marginBottom: 4,
-  },
+  }
 }); 
