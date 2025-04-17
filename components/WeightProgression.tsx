@@ -1,8 +1,38 @@
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Scale, TrendingUp } from 'lucide-react-native';
+import { useState, useEffect } from 'react';
+import { getWeightHistory } from '@/lib/weightUtils';
+import { supabase } from '@/lib/supabase';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 function WeightChart() {
+  const [weightData, setWeightData] = useState<Array<{ date: string; weight: number }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchWeightData = async () => {
+    try {
+      setLoading(true);
+      const data = await getWeightHistory(90); // Get 90 days of history
+      setWeightData(data);
+    } catch (error) {
+      console.error('Error fetching weight data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchWeightData();
+    }, [])
+  );
+
+  useEffect(() => {
+    fetchWeightData();
+  }, []);
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webChartPlaceholder}>
@@ -13,11 +43,38 @@ function WeightChart() {
     );
   }
 
+  if (loading) {
+    return (
+      <View style={[styles.webChartPlaceholder, { backgroundColor: '#0d3d56' }]}>
+        <ActivityIndicator size="large" color="#14b8a6" />
+        <Text style={styles.webChartSubtext}>Loading weight data...</Text>
+      </View>
+    );
+  }
+
+  if (weightData.length < 2) {
+    return (
+      <View style={[styles.webChartPlaceholder, { backgroundColor: '#0d3d56' }]}>
+        <Scale size={32} color="#14b8a6" />
+        <Text style={styles.webChartText}>Not enough data</Text>
+        <Text style={styles.webChartSubtext}>Log your weight to see a chart</Text>
+      </View>
+    );
+  }
+
+  // Format data for the chart
+  const labels = weightData.slice(-5).map(entry => {
+    const date = new Date(entry.date);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+  
+  const weights = weightData.slice(-5).map(entry => entry.weight);
+
   return (
     <LineChart
       data={{
-        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
-        datasets: [{ data: [75, 76, 77, 76.5, 77.5] }],
+        labels: labels,
+        datasets: [{ data: weights }],
       }}
       width={350}
       height={200}
@@ -44,6 +101,78 @@ function WeightChart() {
 }
 
 export default function WeightProgression() {
+  const [weightStats, setWeightStats] = useState({
+    initial: null,
+    current: null,
+    target: null,
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchWeightGoals = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get initial weight from users table
+      const { data, error } = await supabase
+        .from('users')
+        .select('initial_weight')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching initial weight:', error);
+        return;
+      }
+
+      // Get target weight from user_goals table
+      const { data: goalData, error: goalError } = await supabase
+        .from('user_goals')
+        .select('weight')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (goalError && goalError.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+        console.error('Error fetching goal weight:', goalError);
+      }
+
+      // Get latest weight for current
+      const { data: weightData, error: weightError } = await supabase
+        .from('weight_logs')
+        .select('weight')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(1);
+
+      if (weightError) {
+        console.error('Error fetching current weight:', weightError);
+      }
+
+      setWeightStats({
+        initial: data.initial_weight,
+        target: goalData?.weight || null,
+        current: weightData && weightData.length > 0 ? weightData[0].weight : null,
+      });
+    } catch (error) {
+      console.error('Error in fetchWeightGoals:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchWeightGoals();
+    }, [])
+  );
+
+  useEffect(() => {
+    fetchWeightGoals();
+  }, []);
+
   return (
     <View style={styles.widget}>
       <View style={styles.widgetHeader}>
@@ -54,15 +183,33 @@ export default function WeightProgression() {
       <View style={styles.weightStats}>
         <View style={styles.weightStat}>
           <Text style={styles.weightStatLabel}>Starting</Text>
-          <Text style={styles.weightStatValue}>75 kg</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#14b8a6" />
+          ) : (
+            <Text style={styles.weightStatValue}>
+              {weightStats.initial ? `${weightStats.initial} kg` : 'N/A'}
+            </Text>
+          )}
         </View>
         <View style={styles.weightStat}>
           <Text style={styles.weightStatLabel}>Current</Text>
-          <Text style={styles.weightStatValue}>77.5 kg</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#14b8a6" />
+          ) : (
+            <Text style={styles.weightStatValue}>
+              {weightStats.current ? `${weightStats.current} kg` : 'N/A'}
+            </Text>
+          )}
         </View>
         <View style={styles.weightStat}>
           <Text style={styles.weightStatLabel}>Goal</Text>
-          <Text style={styles.weightStatValue}>80 kg</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#14b8a6" />
+          ) : (
+            <Text style={styles.weightStatValue}>
+              {weightStats.target ? `${weightStats.target} kg` : 'N/A'}
+            </Text>
+          )}
         </View>
       </View>
     </View>
