@@ -23,7 +23,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import LiveExerciseCard from '@/components/LiveExerciseCard';
 import ExerciseModal from '@/components/ExerciseModal';
-import ExerciseDetailsModal from '@/components/ExerciseDetailsModal';
 import WorkoutNameModal from '@/components/WorkoutNameModal';
 import ConfirmationModal from '@/components/ConfirmationModal';
 import RestTimerModal from '@/components/RestTimerModal';
@@ -81,14 +80,10 @@ export default function LiveWorkoutScreen() {
 
   // Modals
   const [showExerciseModal, setShowExerciseModal] = useState(false);
-  const [showExerciseDetails, setShowExerciseDetails] = useState(false);
   const [showWorkoutNameModal, setShowWorkoutNameModal] = useState(false);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showRestTimerModal, setShowRestTimerModal] = useState(false);
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(
-    null
-  );
 
   // References
   const displayTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -307,21 +302,73 @@ export default function LiveWorkoutScreen() {
     try {
       if (!userProfile?.id) return [];
 
-      // Get the most recent workout where this exercise was performed
+      console.log("Fetching previous performance for exercise:", exerciseId);
+
+      // Get the most recent workout exercise for this exercise
       const { data: workoutExercises, error: workoutError } = await supabase
         .from('workout_exercises')
         .select(`
-          id
+          id,
+          parent_workout_id,
+          workouts:workouts!parent_workout_id(id, user_id)
         `)
         .eq('exercise_id', exerciseId)
         .eq('workouts.user_id', userProfile.id)
-        .order('id', { ascending: false }) // Simplified ordering
+        .order('created_at', { ascending: false })
         .limit(1);
 
-      if (workoutError || !workoutExercises || workoutExercises.length === 0) {
-        console.log("No previous workout exercises found:", workoutError?.message);
+      if (workoutError) {
+        console.log("Error fetching workout exercises:", workoutError.message);
+        console.log("Error details:", workoutError);
         return [];
       }
+
+      if (!workoutExercises || workoutExercises.length === 0) {
+        console.log("No previous workout exercises found for exercise:", exerciseId);
+        
+        // Essayer une approche alternative avec workout_id au lieu de parent_workout_id
+        console.log("Trying alternative approach with workout_id...");
+        const { data: altWorkoutExercises, error: altError } = await supabase
+          .from('workout_exercises')
+          .select(`
+            id,
+            workout_id,
+            workouts:workouts!workout_id(id, user_id)
+          `)
+          .eq('exercise_id', exerciseId)
+          .eq('workouts.user_id', userProfile.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        if (altError || !altWorkoutExercises || altWorkoutExercises.length === 0) {
+          console.log("Alternative approach also failed:", altError?.message);
+          return [];
+        }
+        
+        console.log("Found workout exercise with alternative approach:", altWorkoutExercises[0].id);
+        
+        // Continue with the alternative data
+        const { data: setData, error: setError } = await supabase
+          .from('sets')
+          .select('rep_count, weight, set_order')
+          .eq('workout_exercise_id', altWorkoutExercises[0].id)
+          .order('set_order');
+          
+        if (setError || !setData || setData.length === 0) {
+          console.log("No set data found with alternative approach.");
+          return [];
+        }
+        
+        console.log("Found previous sets with alternative approach:", setData.length);
+        
+        return setData.map(set => ({
+          reps: set.rep_count.toString(),
+          weight: set.weight.toString(),
+          set_order: set.set_order
+        }));
+      }
+
+      console.log("Found previous workout exercise:", workoutExercises[0].id);
 
       // Get the sets for this exercise in that workout
       const { data: setData, error: setError } = await supabase
@@ -335,12 +382,48 @@ export default function LiveWorkoutScreen() {
         return [];
       }
 
+      if (!setData || setData.length === 0) {
+        console.log("No set data found for workout exercise:", workoutExercises[0].id);
+        
+        // Essayer une approche alternative si la table sets ne renvoie rien
+        // Certaines versions de la base de données stockent les informations de sets directement dans workout_exercises
+        const { data: exerciseDetails, error: exerciseError } = await supabase
+          .from('workout_exercises')
+          .select('*')
+          .eq('id', workoutExercises[0].id)
+          .single();
+          
+        if (!exerciseError && exerciseDetails && exerciseDetails.sets) {
+          try {
+            // Si les sets sont stockés sous forme de JSON dans un champ sets
+            const setArray = typeof exerciseDetails.sets === 'string' 
+              ? JSON.parse(exerciseDetails.sets) 
+              : exerciseDetails.sets;
+              
+            console.log("Using sets from workout_exercises:", setArray.length);
+            
+            return Array.isArray(setArray) ? setArray.map((set, index) => ({
+              reps: (set.reps || set.rep_count || "0").toString(),
+              weight: (set.weight || "0").toString(),
+              set_order: set.order || set.set_order || index
+            })) : [];
+          } catch (e) {
+            console.error("Error parsing sets from workout_exercises:", e);
+            return [];
+          }
+        }
+        
+        return [];
+      }
+
+      console.log("Found previous sets:", setData.length);
+
       // Format the set data to include both rep_count and weight
-      return setData ? setData.map(set => ({
+      return setData.map(set => ({
         reps: set.rep_count.toString(),
         weight: set.weight.toString(),
         set_order: set.set_order
-      })) : [];
+      }));
       
     } catch (error) {
       console.error('Error fetching previous performance:', error);
@@ -636,8 +719,12 @@ export default function LiveWorkoutScreen() {
   };
 
   const handleExerciseInfo = (exercise: Exercise) => {
-    setSelectedExercise(exercise);
-    setShowExerciseDetails(true);
+    // Utiliser push avec un flag de redirection pour éviter l'empilement tout en préservant le contexte
+    // Le paramètre 'source: live-workout' nous permettra de savoir d'où vient l'utilisateur si nécessaire
+    router.push({
+      pathname: "/modals/exercise-details/[id]",
+      params: { id: exercise.id, source: 'live-workout' }
+    });
   };
 
   const handleUpdateWorkoutName = (name: string) => {
@@ -819,12 +906,6 @@ export default function LiveWorkoutScreen() {
         onClose={() => setShowExerciseModal(false)}
         onSelect={handleExerciseSelection}
         excludeExercises={exercises.map((e) => e.id)}
-      />
-
-      <ExerciseDetailsModal
-        visible={showExerciseDetails}
-        onClose={() => setShowExerciseDetails(false)}
-        exercise={selectedExercise}
       />
 
       <WorkoutNameModal

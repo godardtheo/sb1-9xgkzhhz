@@ -217,6 +217,27 @@ export default function LiveExerciseCard({
     onSetUpdate(exercise.id, setIndex, field, filteredValue);
   };
 
+  // For gérer l'état de focus des inputs
+  const [focusedInputs, setFocusedInputs] = useState<{[key: string]: boolean}>({});
+  
+  // Quand l'input reçoit le focus, on met à jour l'état
+  const handleFocus = (setIndex: number, field: 'weight' | 'reps') => {
+    const inputKey = `${setIndex}-${field}`;
+    setFocusedInputs(prev => ({...prev, [inputKey]: true}));
+  };
+  
+  // Quand l'input perd le focus, on met à jour l'état
+  const handleBlur = (setIndex: number, field: 'weight' | 'reps') => {
+    const inputKey = `${setIndex}-${field}`;
+    setFocusedInputs(prev => ({...prev, [inputKey]: false}));
+    
+    // Si la valeur est vide et que le champ a perdu le focus, on réinitialise à '0'
+    const set = exercise.sets[setIndex];
+    if (field === 'weight' && set && (!set[field] || set[field] === '')) {
+      onSetUpdate(exercise.id, setIndex, field, '0');
+    }
+  };
+
   // For checkbox
   const handleSetCompleted = (setIndex: number, completed: boolean) => {
     onSetUpdate(exercise.id, setIndex, 'completed', completed);
@@ -358,7 +379,7 @@ export default function LiveExerciseCard({
             <View style={[styles.setCell, styles.setWeightCell]}>
               <TextInput
                 style={[styles.input, set.completed && styles.completedInput]}
-                value={set.weight}
+                value={focusedInputs[`${setIndex}-weight`] && set.weight === '0' ? '' : set.weight}
                 onChangeText={(value) =>
                   handleInputChange(setIndex, 'weight', value)
                 }
@@ -366,6 +387,8 @@ export default function LiveExerciseCard({
                 placeholder="0"
                 placeholderTextColor="#5eead4"
                 editable={isInWorkout && !set.completed}
+                onFocus={() => handleFocus(setIndex, 'weight')}
+                onBlur={() => handleBlur(setIndex, 'weight')}
               />
             </View>
 
@@ -380,6 +403,8 @@ export default function LiveExerciseCard({
                 placeholder="0"
                 placeholderTextColor="#5eead4"
                 editable={isInWorkout && !set.completed}
+                onFocus={() => handleFocus(setIndex, 'reps')}
+                onBlur={() => handleBlur(setIndex, 'reps')}
               />
             </View>
 
@@ -446,12 +471,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
     position: 'relative',
-    ...Platform.select({
-      web: {
-        cursor: 'default',
-        userSelect: 'none',
-      },
-    }),
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      cursor: 'default',
+      // @ts-ignore
+      userSelect: 'none',
+    } : {}),
   },
   exerciseHeader: {
     flexDirection: 'row',
@@ -612,10 +637,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d3d56',
     justifyContent: 'center',
     alignItems: 'center',
-    ...Platform.select({
-      web: {
-        cursor: 'grab',
-      },
-    }),
+    ...(Platform.OS === 'web' ? {
+      // @ts-ignore
+      cursor: 'grab',
+    } : {}),
   },
 });

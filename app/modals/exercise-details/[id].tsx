@@ -21,18 +21,36 @@ type ExerciseHistory = {
 
 export default function ExerciseDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const { id } = params;
   const [exercise, setExercise] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [favorite, setFavorite] = useState(false);
   const [history, setHistory] = useState<ExerciseHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [weightUnit, setWeightUnit] = useState<string>('kg'); // Default to kg
+  
+  // Protection contre les rendus multiples
+  const isDataFetched = React.useRef(false);
+
+  // Pour stocker les paramètres de redirection
+  const returnParams = React.useRef<Record<string, string>>({});
+
+  // Stocker les paramètres de retour au premier rendu
+  useEffect(() => {
+    // Récupérer les paramètres qui seraient utiles pour revenir à l'écran live-workout
+    if (params.template_id) {
+      returnParams.current.template_id = params.template_id as string;
+    }
+  }, [params]);
 
   // Fetch exercise details on mount
   useEffect(() => {
-    fetchExerciseDetails();
-    fetchUserWeightUnit();
+    if (!isDataFetched.current) {
+      fetchExerciseDetails();
+      fetchUserWeightUnit();
+      isDataFetched.current = true;
+    }
   }, [id]);
 
   // Fetch user's weight unit preference
@@ -245,6 +263,7 @@ export default function ExerciseDetailsScreen() {
   };
 
   const handleBack = () => {
+    // Utiliser router.back() pour revenir à l'écran précédent avec tout son contexte
     router.back();
   };
 
@@ -271,7 +290,7 @@ export default function ExerciseDetailsScreen() {
         options={{ 
           title: exercise?.name || 'Exercise Details',
           headerShown: true,
-          presentation: 'modal',
+          presentation: 'card',
           headerTitleStyle: styles.headerTitle,
           headerStyle: styles.header,
           headerTitleAlign: 'center',

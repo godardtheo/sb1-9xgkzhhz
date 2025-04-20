@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Dashboard, ChartBar as Statistics, CircleUser as UserProfile, Plus, Dumbbell as Exercises } from 'lucide-react-native';
+import { Gauge, BarChartBig as ChartColumnIncreasing, CircleUser as UserProfile, Sheet as Sheet, Dumbbell as Exercises } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
 import ResumeTrainingButton from '@/components/ResumeTrainingButton';
 import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
@@ -17,7 +17,7 @@ export default function TabLayout() {
             <View style={[StyleSheet.absoluteFill, styles.tabBarBackground]} />
           ),
           tabBarShowLabel: false,
-          tabBarActiveTintColor: '#14b8a6',
+          tabBarActiveTintColor: '#ff90b3',
           tabBarInactiveTintColor: '#5eead4',
         }}>
         <Tabs.Screen
@@ -25,7 +25,7 @@ export default function TabLayout() {
           options={{
             tabBarIcon: ({ color, size }) => (
               <View style={styles.iconContainer}>
-                <Dashboard size={24} color={color} strokeWidth={2.5} />
+                <Gauge size={24} color={color} strokeWidth={2.5} />
               </View>
             ),
           }}
@@ -35,7 +35,7 @@ export default function TabLayout() {
           options={{
             tabBarIcon: ({ color, size }) => (
               <View style={styles.iconContainer}>
-                <Statistics size={24} color={color} strokeWidth={2.5} />
+                <ChartColumnIncreasing size={24} color={color} strokeWidth={2.5} />
               </View>
             ),
           }}
@@ -51,23 +51,21 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="settings"
+          name="action"
           options={{
             tabBarIcon: ({ color, size }) => (
               <View style={styles.iconContainer}>
-                <UserProfile size={24} color={color} strokeWidth={2.5} />
+                <Sheet size={24} color={color} strokeWidth={2.5} />
               </View>
             ),
           }}
         />
         <Tabs.Screen
-          name="action"
+          name="settings"
           options={{
-            tabBarIcon: () => (
+            tabBarIcon: ({ color, size }) => (
               <View style={styles.iconContainer}>
-                <View style={styles.actionButton}>
-                  <Plus size={22} color="#021a19" strokeWidth={3} />
-                </View>
+                <UserProfile size={24} color={color} strokeWidth={2.5} />
               </View>
             ),
           }}
