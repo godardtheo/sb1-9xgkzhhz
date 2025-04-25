@@ -91,7 +91,7 @@ export default function WorkoutsScreen() {
                 styles.muscleGroupText,
                 selectedMuscles.includes(muscle) && styles.selectedMuscleGroupText
               ]}>
-                {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
               </Text>
             </Pressable>
           ))}
@@ -129,14 +129,20 @@ export default function WorkoutsScreen() {
                     </Text>
                   </View>
                   <View style={styles.muscleChips}>
-                    {workout.muscles.slice(0, 3).map((muscle, index) => (
-                      <View key={muscle} style={styles.muscleChip}>
-                        <Text style={styles.muscleChipText}>
-                          {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
-                        </Text>
+                    {workout.muscles && workout.muscles.length > 0 ? (
+                      workout.muscles.slice(0, 3).map((muscle, index) => (
+                        <View key={muscle} style={styles.muscleChip}>
+                          <Text style={styles.muscleChipText}>
+                            {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.muscleChip}>
+                        <Text style={styles.muscleChipText}>No muscles</Text>
                       </View>
-                    ))}
-                    {workout.muscles.length > 3 && (
+                    )}
+                    {workout.muscles && workout.muscles.length > 3 && (
                       <View style={[styles.muscleChip, styles.moreChip]}>
                         <Text style={styles.muscleChipText}>
                           +{workout.muscles.length - 3}

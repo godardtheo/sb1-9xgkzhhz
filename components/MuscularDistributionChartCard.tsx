@@ -16,7 +16,8 @@ interface WorkoutExerciseData {
   parent_workout_id: string;
   sets: number;
   exercise: {
-    muscle: string;
+    muscle_primary: string[];
+    muscle_secondary: string[];
   };
 }
 
@@ -201,10 +202,13 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
         const { data: exercisesData, error: exercisesError } = await supabase
           .from('workout_exercises')
           .select(`
-            parent_workout_id,
+            id,
             sets,
-            exercise:exercise_id (
-              muscle
+            exercises:exercise_id (
+              id,
+              name,
+              muscle_primary,
+              muscle_secondary
             )
           `)
           .in('parent_workout_id', workoutIds);
@@ -223,25 +227,34 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
         
         // Safely cast the data or use type assertion
         (exercisesData as any[]).forEach(exerciseData => {
-          // Skip if muscle data is missing
-          if (!exerciseData.exercise || !exerciseData.exercise.muscle) return;
+          // Skip if exercise data is missing
+          if (!exerciseData.exercises) return;
           
-          const muscle = exerciseData.exercise.muscle.toLowerCase();
-          const sets = exerciseData.sets || 0;
+          // Process primary muscles (weight these more heavily)
+          if (exerciseData.exercises.muscle_primary && exerciseData.exercises.muscle_primary.length > 0) {
+            exerciseData.exercises.muscle_primary.forEach((muscle: string) => {
+              if (!muscle) return;
+              const muscleName = muscle.toLowerCase();
+              const sets = exerciseData.sets || 0;
+              
+              // Primary muscles count fully
+              muscleSetCounts[muscleName] = (muscleSetCounts[muscleName] || 0) + sets;
+            });
+          }
           
-          // Increment the count for this muscle
-          muscleSetCounts[muscle] = (muscleSetCounts[muscle] || 0) + sets;
+          // Secondary muscles are ignored as requested
         });
         
-        // Convert aggregated data to array format
-        const muscleDataArray: MuscleSetCount[] = Object.entries(muscleSetCounts)
+        // Create an array of { muscle, sets } and sort by sets in descending order
+        const sortedMuscleData = Object.entries(muscleSetCounts)
           .map(([muscle, sets]) => ({
             muscle,
-            sets
+            // No need for rounding to 1 decimal place since we're not using 0.5 multiplier anymore
+            sets: Math.round(sets)
           }))
-          .sort((a, b) => b.sets - a.sets); // Sort by set count (descending)
-        
-        setMuscleData(muscleDataArray);
+          .sort((a, b) => b.sets - a.sets);
+
+        setMuscleData(sortedMuscleData);
       } catch (err: any) {
         console.error('Error fetching muscle distribution data:', err);
         setError(err.message);

@@ -16,8 +16,9 @@ import uuid from 'react-native-uuid';
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
-  equipment: string;
+  muscle_primary: string[];
+  muscle_secondary?: string[];
+  equipment: string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -100,12 +101,13 @@ export default function EditWorkoutScreen() {
           exercises (
             id,
             name,
-            muscle,
             equipment,
             instructions,
             video_url,
             type,
-            difficulty
+            difficulty,
+            muscle_primary,
+            muscle_secondary
           ),
           template_exercise_sets (
             id,
@@ -120,21 +122,31 @@ export default function EditWorkoutScreen() {
       if (exercisesError) throw exercisesError;
 
       if (exerciseData) {
-        const formattedExercises = exerciseData.map(item => ({
-          id: item.exercises.id,
-          name: item.exercises.name,
-          muscle: item.exercises.muscle,
-          equipment: item.exercises.equipment,
-          instructions: item.exercises.instructions,
-          video_url: item.exercises.video_url,
-          type: item.exercises.type,
-          difficulty: item.exercises.difficulty,
-          sets: item.template_exercise_sets.map(set => ({
-            id: set.id,
-            minReps: set.min_reps.toString(),
-            maxReps: set.max_reps.toString()
-          }))
-        }));
+        // Explicitly type the exerciseData for clarity
+        const formattedExercises = exerciseData.map((item: any) => {
+          return {
+            id: item.exercises.id,
+            name: item.exercises.name,
+            equipment: Array.isArray(item.exercises.equipment) && item.exercises.equipment.length > 0 
+              ? item.exercises.equipment 
+              : [],
+            muscle_primary: Array.isArray(item.exercises.muscle_primary) && item.exercises.muscle_primary.length > 0 
+              ? item.exercises.muscle_primary 
+              : [],
+            muscle_secondary: Array.isArray(item.exercises.muscle_secondary) && item.exercises.muscle_secondary.length > 0 
+              ? item.exercises.muscle_secondary 
+              : [],
+            instructions: item.exercises.instructions,
+            video_url: item.exercises.video_url,
+            type: item.exercises.type,
+            difficulty: item.exercises.difficulty,
+            sets: item.template_exercise_sets.map((set: any) => ({
+              id: set.id,
+              minReps: set.min_reps.toString(),
+              maxReps: set.max_reps.toString()
+            }))
+          };
+        });
 
         setExercises(formattedExercises);
       }
@@ -429,6 +441,8 @@ export default function EditWorkoutScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.exercisesList}
         showsVerticalScrollIndicator={true}
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           {reorderedExercises.map((exercise, index) => (

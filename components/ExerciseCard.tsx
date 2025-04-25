@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 type ExerciseProps = {
   id: string;
   name: string;
-  muscle: string;
+  muscle_primary?: string[];
   isFavorite: boolean;
   onPress: () => void;
   onFavoriteToggle?: (id: string, isFavorite: boolean) => void;
@@ -15,7 +15,7 @@ type ExerciseProps = {
 export default function ExerciseCard({ 
   id, 
   name, 
-  muscle, 
+  muscle_primary = [], 
   isFavorite, 
   onPress,
   onFavoriteToggle 
@@ -86,21 +86,34 @@ export default function ExerciseCard({
     }
   };
 
-  // Helper to capitalize first letter
+  // Helper function for capitalizing muscle names
   const capitalizeFirstLetter = (string: string) => {
-    return string.charAt(0).toUpperCase() + string.slice(1);
+    if (!string) return '';
+    return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
   };
 
   return (
     <Pressable style={styles.container} onPress={onPress}>
       <View style={styles.iconContainer}>
-        <Text style={styles.iconText}>{name.charAt(0).toUpperCase()}</Text>
+        <Text style={styles.iconText}>{name && name.charAt(0).toUpperCase()}</Text>
       </View>
       
       <View style={styles.content}>
-        <Text style={styles.name} numberOfLines={1}>{name}</Text>
-        <View style={styles.muscleTag}>
-          <Text style={styles.muscleText}>{capitalizeFirstLetter(muscle)}</Text>
+        <Text style={styles.name} numberOfLines={1}>{name || ''}</Text>
+        <View style={styles.musclesContainer}>
+          {muscle_primary && muscle_primary.length > 0 ? (
+            muscle_primary.map((muscle, index) => (
+              <View key={index} style={styles.muscleTag}>
+                <Text style={styles.muscleText}>
+                  {capitalizeFirstLetter(muscle)}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <View style={styles.muscleTag}>
+              <Text style={styles.muscleText}>No muscles specified</Text>
+            </View>
+          )}
         </View>
       </View>
       
@@ -154,12 +167,18 @@ const styles = StyleSheet.create({
     color: '#ccfbf1',
     marginBottom: 4,
   },
+  musclesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
   muscleTag: {
     backgroundColor: '#0f766e',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
-    alignSelf: 'flex-start',
+    marginRight: 4,
+    marginBottom: 4,
   },
   muscleText: {
     fontSize: 12,

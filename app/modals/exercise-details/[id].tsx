@@ -269,7 +269,8 @@ export default function ExerciseDetailsScreen() {
 
   // Helper to capitalize first letter
   const capitalizeFirstLetter = (string: string) => {
-    return string ? string.charAt(0).toUpperCase() + string.slice(1) : '';
+    if (!string || typeof string !== 'string') return '';
+    return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
   };
 
   // Parse instructions
@@ -315,26 +316,29 @@ export default function ExerciseDetailsScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Muscle tags */}
+        {/* Muscles tags section */}
         <View style={styles.tags}>
-          <View style={[styles.tag, styles.primaryTag]}>
-            <Text style={styles.primaryTagText}>{capitalizeFirstLetter(exercise?.muscle)}</Text>
-          </View>
-          {exercise?.type && (
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{exercise.type}</Text>
+          {/* Primary Muscles */}
+          {exercise?.muscle_primary && exercise.muscle_primary.length > 0 ? (
+            exercise.muscle_primary.map((muscle: string, index: number) => (
+              <View key={`primary-${index}`} style={[styles.tag, styles.primaryTag]}>
+                <Text style={styles.primaryTagText}>{capitalizeFirstLetter(muscle)}</Text>
+              </View>
+            ))
+          ) : (
+            <View style={[styles.tag, styles.primaryTag]}>
+              <Text style={styles.primaryTagText}>No primary muscles</Text>
             </View>
           )}
-          {exercise?.difficulty && (
-            <View style={[styles.tag, styles.difficultyTag]}>
-              <Text style={styles.tagText}>{exercise.difficulty}</Text>
-            </View>
-          )}
-          {exercise?.equipment && (
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{capitalizeFirstLetter(exercise.equipment)}</Text>
-            </View>
-          )}
+          
+          {/* Secondary Muscles */}
+          {exercise?.muscle_secondary && exercise.muscle_secondary.length > 0 && 
+            exercise.muscle_secondary.map((muscle: string, index: number) => (
+              <View key={`secondary-${index}`} style={[styles.tag, styles.secondaryTag]}>
+                <Text style={styles.secondaryTagText}>{capitalizeFirstLetter(muscle)}</Text>
+              </View>
+            ))
+          }
         </View>
 
         {/* Video if available */}
@@ -357,10 +361,23 @@ export default function ExerciseDetailsScreen() {
         )}
 
         {/* Instructions section */}
-        {instructions.length > 0 && (
+        {(instructions.length > 0 || (exercise?.equipment && Array.isArray(exercise.equipment) && exercise.equipment.length > 0)) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Instructions</Text>
             <View style={styles.sectionContent}>
+              {/* Equipment section inside instructions */}
+              {exercise?.equipment && Array.isArray(exercise.equipment) && exercise.equipment.length > 0 && (
+                <View style={styles.equipmentSection}>
+                  <Text style={styles.equipmentLabel}>Equipment: </Text>
+                  {exercise.equipment.map((item: string, index: number) => (
+                    <View key={`equipment-${index}`} style={styles.equipmentTag}>
+                      <Text style={styles.equipmentTagText}>{capitalizeFirstLetter(item.replace('_', ' '))}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              
+              {/* Instructions list */}
               {instructions.map((instruction: string, index: number) => (
                 <View key={index} style={styles.instructionItem}>
                   <Text style={styles.instructionNumber}>{index + 1}</Text>
@@ -450,8 +467,8 @@ const styles = StyleSheet.create({
   primaryTag: {
     backgroundColor: '#0d9488',
   },
-  difficultyTag: {
-    backgroundColor: '#0f766e',
+  secondaryTag: {
+    backgroundColor: '#164e63', // Bleu plus foncé pour les muscles secondaires
   },
   tagText: {
     color: '#ccfbf1',
@@ -462,6 +479,40 @@ const styles = StyleSheet.create({
     color: '#f0fdfa',
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
+  },
+  secondaryTagText: {
+    color: '#a5f3fc', // Couleur légèrement différente pour les muscles secondaires
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+  },
+  equipmentSection: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 10,
+  },
+  equipmentLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#ffffff',
+    marginRight: 6,
+  },
+  equipmentTag: {
+    backgroundColor: '#134e4a',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  equipmentTagText: {
+    color: '#99f6e4',
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+  },
+  difficultyTag: {
+    backgroundColor: '#0f766e',
   },
   videoContainer: {
     height: 220,

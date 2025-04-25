@@ -15,8 +15,10 @@ import { useRef, useState, useEffect } from 'react';
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
-  equipment: string;
+  muscle?: string;  // Format ancien
+  muscle_primary?: string[];  // Format nouveau
+  muscle_secondary?: string[];
+  equipment?: string | string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -93,6 +95,9 @@ export default function DraggableExerciseCard({
   const SCROLL_THRESHOLD = 120; // px from edge to trigger auto-scroll
   const MAX_SCROLL_SPEED = 8; // Maximum scroll speed in px per frame
   const { height: WINDOW_HEIGHT } = Dimensions.get('window');
+  
+  // Set this to false so we don't interfere with parent scroll
+  const disableDrag = useSharedValue(false);
   
   // Track scroll position
   useEffect(() => {
@@ -198,15 +203,25 @@ export default function DraggableExerciseCard({
     updateItemHeight(index, height);
   };
   
-  // Create simultaneous gesture for long press + pan
+  // Touch handler to detect long press for dragging
+  const longPressHandler = () => {
+    if (draggingEnabled.value) {
+      disableDrag.value = false;
+    }
+  };
+  
+  // Setup long press timer
+  useEffect(() => {
+    return () => {
+      // Clear any timers
+      disableDrag.value = true;
+    };
+  }, []);
+  
+  // Create the dragGesture that only works from the drag handle
   const dragGesture = Gesture.Pan()
     .activateAfterLongPress(200)
-    .onTouchesDown(() => {
-      if (!draggingEnabled.value) return;
-    })
     .onStart(() => {
-      if (!draggingEnabled.value) return;
-      
       isDragging.value = true;
       activeIndex.value = index;
       
@@ -266,24 +281,6 @@ export default function DraggableExerciseCard({
       dragY.value = withSpring(0, SPRING_CONFIG);
       runOnJS(stopAutoScroll)();
     });
-  
-  // Allow scrolling when not dragging
-  const scrollGesture = Gesture.Pan()
-    .onTouchesDown(() => {
-      draggingEnabled.value = true;
-    })
-    .onStart(() => {
-      if (isDragging.value) return;
-    })
-    .onUpdate(() => {
-      if (isDragging.value) return;
-    })
-    .onEnd(() => {
-      if (isDragging.value) return;
-    });
-  
-  // Combine gestures with proper priorities
-  const combinedGesture = Gesture.Exclusive(dragGesture, scrollGesture);
   
   // Create animated styles
   const animatedStyle = useAnimatedStyle(() => {
@@ -347,94 +344,128 @@ export default function DraggableExerciseCard({
     };
   }, []);
   
+  // Helper function for formatting muscle names
+  const capitalizeFirstLetter = (string: string) => {
+    if (!string || typeof string !== 'string') return '';
+    return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
+  };
+  
   return (
-    <GestureDetector gesture={combinedGesture}>
-      <Animated.View 
-        style={[
-          styles.container,
-          backgroundStyle,
-          animatedStyle,
-        ]}
-        onLayout={handleLayout}
-      >
-        <View style={styles.exerciseHeader}>
-          <View style={styles.exerciseInfo}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
-          </View>
-          <View style={styles.exerciseActions}>
-            <View style={styles.actionButtons}>
-              <Pressable 
-                onPress={() => onInfo(exercise)} 
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Info size={20} color="#5eead4" />
-              </Pressable>
-              <Pressable 
-                onPress={() => onRemove(exercise.id)} 
-                style={styles.lastActionButton}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Trash2 size={20} color="#5eead4" />
-              </Pressable>
+    <Animated.View 
+      style={[styles.container, backgroundStyle, animatedStyle]}
+      onLayout={handleLayout}
+    >
+      <View style={styles.exerciseHeader}>
+        <View style={styles.exerciseInfo}>
+          <Text style={styles.exerciseName}>{exercise.name}</Text>
+          
+          {/* Afficher le muscle dans le format ancien (string) */}
+          {exercise.muscle && (
+            <View style={styles.musclesContainer}>
+              <View style={styles.primaryMuscleChip}>
+                <Text style={styles.muscleChipText}>
+                  {capitalizeFirstLetter(exercise.muscle)}
+                </Text>
+              </View>
             </View>
-          </View>
-        </View>
-
-        <View style={styles.exerciseContent}>
-          <View style={styles.exerciseMainContent}>
-            <View style={styles.setsContainer}>
-              {exercise.sets.map((set, setIndex) => (
-                <View key={`${exercise.id}-set-${set.id}-${setIndex}`} style={styles.setRow}>
-                  <Text style={styles.setNumber}>{setIndex + 1}</Text>
-                  <TextInput
-                    key={`${set.id}-min`}
-                    style={styles.setInput}
-                    value={set.minReps}
-                    onChangeText={(value) => handleUpdateReps(exercise.id, set.id, 'min', value)}
-                    keyboardType="numeric"
-                    placeholder="6"
-                    placeholderTextColor="#5eead4"
-                    maxLength={2}
-                    selectTextOnFocus
-                  />
-                  <Text style={styles.setText}>to</Text>
-                  <TextInput
-                    key={`${set.id}-max`}
-                    style={styles.setInput}
-                    value={set.maxReps}
-                    onChangeText={(value) => handleUpdateReps(exercise.id, set.id, 'max', value)}
-                    keyboardType="numeric"
-                    placeholder="12"
-                    placeholderTextColor="#5eead4"
-                    maxLength={2}
-                    selectTextOnFocus
-                  />
-                  <Text style={styles.setText}>reps</Text>
+          )}
+          
+          {/* Afficher les muscles dans le nouveau format (arrays) */}
+          {(!exercise.muscle && (exercise.muscle_primary || exercise.muscle_secondary)) && (
+            <View style={styles.musclesContainer}>
+              {exercise.muscle_primary && exercise.muscle_primary.map((muscle, i) => (
+                <View key={`primary-${i}`} style={styles.primaryMuscleChip}>
+                  <Text style={styles.muscleChipText}>
+                    {capitalizeFirstLetter(muscle)}
+                  </Text>
+                </View>
+              ))}
+              
+              {exercise.muscle_secondary && exercise.muscle_secondary.map((muscle, i) => (
+                <View key={`secondary-${i}`} style={styles.secondaryMuscleChip}>
+                  <Text style={styles.muscleChipText}>
+                    {capitalizeFirstLetter(muscle)}
+                  </Text>
                 </View>
               ))}
             </View>
-
-            <View style={styles.setActions}>
-              {exercise.sets.length > 1 && (
-                <Pressable 
-                  style={styles.setActionButton}
-                  onPress={() => onRemoveSet?.(exercise.id)}
-                >
-                  <CircleMinus size={16} color="#5eead4" />
-                  <Text style={styles.setActionText}>Remove Set</Text>
-                </Pressable>
-              )}
-              <Pressable 
-                style={[styles.setActionButton, styles.addSetButton]}
-                onPress={() => onAddSet?.(exercise.id)}
-              >
-                <Plus size={16} color="#5eead4" />
-                <Text style={styles.setActionText}>Add Set</Text>
-              </Pressable>
-            </View>
+          )}
+        </View>
+        <View style={styles.exerciseActions}>
+          <View style={styles.actionButtons}>
+            <Pressable 
+              onPress={() => onInfo(exercise)} 
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Info size={20} color="#5eead4" />
+            </Pressable>
+            <Pressable 
+              onPress={() => onRemove(exercise.id)} 
+              style={styles.lastActionButton}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Trash2 size={20} color="#5eead4" />
+            </Pressable>
           </View>
-          
-          <View style={styles.dragHandleContainer}>
+        </View>
+      </View>
+
+      <View style={styles.exerciseContent}>
+        <View style={styles.exerciseMainContent}>
+          <View style={styles.setsContainer}>
+            {exercise.sets.map((set, setIndex) => (
+              <View key={`${exercise.id}-set-${set.id}-${setIndex}`} style={styles.setRow}>
+                <Text style={styles.setNumber}>{setIndex + 1}</Text>
+                <TextInput
+                  key={`${set.id}-min`}
+                  style={styles.setInput}
+                  value={set.minReps}
+                  onChangeText={(value) => handleUpdateReps(exercise.id, set.id, 'min', value)}
+                  keyboardType="numeric"
+                  placeholder="6"
+                  placeholderTextColor="#5eead4"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={styles.setText}>to</Text>
+                <TextInput
+                  key={`${set.id}-max`}
+                  style={styles.setInput}
+                  value={set.maxReps}
+                  onChangeText={(value) => handleUpdateReps(exercise.id, set.id, 'max', value)}
+                  keyboardType="numeric"
+                  placeholder="12"
+                  placeholderTextColor="#5eead4"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={styles.setText}>reps</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.setActions}>
+            {exercise.sets.length > 1 && (
+              <Pressable 
+                style={styles.setActionButton}
+                onPress={() => onRemoveSet?.(exercise.id)}
+              >
+                <CircleMinus size={16} color="#5eead4" />
+                <Text style={styles.setActionText}>Remove Set</Text>
+              </Pressable>
+            )}
+            <Pressable 
+              style={[styles.setActionButton, styles.addSetButton]}
+              onPress={() => onAddSet?.(exercise.id)}
+            >
+              <Plus size={16} color="#5eead4" />
+              <Text style={styles.setActionText}>Add Set</Text>
+            </Pressable>
+          </View>
+        </View>
+        
+        <View style={styles.dragHandleContainer}>
+          <GestureDetector gesture={dragGesture}>
             <Animated.View style={[
               styles.dragHandle,
               useAnimatedStyle(() => ({
@@ -447,10 +478,10 @@ export default function DraggableExerciseCard({
             ]}>
               <GripVertical size={20} color="#5eead4" />
             </Animated.View>
-          </View>
+          </GestureDetector>
         </View>
-      </Animated.View>
-    </GestureDetector>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -470,7 +501,10 @@ const styles = StyleSheet.create({
     elevation: 4,
     ...Platform.select({
       web: {
+        // Fix for cursor type error
+        // @ts-ignore
         cursor: 'default',
+        // @ts-ignore
         userSelect: 'none',
       },
     }),
@@ -498,6 +532,32 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
   },
+  musclesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  primaryMuscleChip: {
+    backgroundColor: '#0d9488',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  secondaryMuscleChip: {
+    backgroundColor: '#0369a1',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  muscleChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#ccfbf1',
+  },
   exerciseActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -517,6 +577,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
     ...Platform.select({
       web: {
+        // Fix for cursor type error
+        // @ts-ignore
         cursor: 'grab',
       },
     }),

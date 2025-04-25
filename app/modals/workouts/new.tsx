@@ -108,6 +108,8 @@ export default function NewWorkoutScreen() {
 
       // Use reorderedExercises to preserve order
       for (const [index, exercise] of reorderedExercises.entries()) {
+        if (!exercise || !exercise.id) continue; // Skip if exercise is null or missing id
+        
         const { data: templateExercise, error: exerciseError } = await supabase
           .from('template_exercises')
           .insert({
@@ -124,8 +126,8 @@ export default function NewWorkoutScreen() {
 
         const setsData = exercise.sets.map((set, setIndex) => ({
           template_exercise_id: templateExercise.id,
-          min_reps: parseInt(set.minReps),
-          max_reps: parseInt(set.maxReps),
+          min_reps: parseInt(set.minReps) || 0,
+          max_reps: parseInt(set.maxReps) || 0,
           order: setIndex
         }));
 

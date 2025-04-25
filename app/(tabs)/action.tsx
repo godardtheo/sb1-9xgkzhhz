@@ -91,62 +91,6 @@ export default function ActionScreen() {
             <ChevronRight size={20} color="#5eead4" />
           </Pressable>
         </View>
-
-        <View style={styles.exerciseSection}>
-          <Text style={styles.sectionTitle}>Exercise Library</Text>
-          
-          <Pressable style={styles.searchContainer}>
-            <Search size={20} color="#5eead4" />
-            <Text style={styles.searchPlaceholder}>Search exercises...</Text>
-          </Pressable>
-
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.muscleGroupsScroll}
-            contentContainerStyle={styles.muscleGroupsContent}
-          >
-            {muscleGroups.map((muscle) => (
-              <Pressable
-                key={muscle}
-                style={[
-                  styles.muscleGroupButton,
-                  selectedMuscle === muscle && styles.selectedMuscleGroup
-                ]}
-                onPress={() => setSelectedMuscle(muscle)}
-              >
-                <Text style={[
-                  styles.muscleGroupText,
-                  selectedMuscle === muscle && styles.selectedMuscleGroupText
-                ]}>
-                  {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          {loading ? (
-            <Text style={styles.statusText}>Loading exercises...</Text>
-          ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : exercises.length > 0 ? (
-            <View style={styles.exerciseList}>
-              {exercises.map((exercise: any) => (
-                <Pressable key={exercise.id} style={styles.exerciseCard}>
-                  <View style={styles.exerciseInfo}>
-                    <Text style={styles.exerciseName}>{exercise.name}</Text>
-                    <Text style={styles.exerciseDetail}>
-                      {exercise.muscle} • {exercise.equipment || 'No equipment'}
-                    </Text>
-                  </View>
-                  <ChevronRight size={20} color="#5eead4" />
-                </Pressable>
-              ))}
-            </View>
-          ) : selectedMuscle ? (
-            <Text style={styles.statusText}>No exercises found</Text>
-          ) : null}
-        </View>
       </ScrollView>
 
       {showInfo && (

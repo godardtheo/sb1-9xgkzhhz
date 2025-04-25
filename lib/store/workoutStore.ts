@@ -33,7 +33,14 @@ export const useWorkoutStore = create<WorkoutStore>((set) => ({
           estimated_duration,
           template_exercises!inner (
             id,
-            sets
+            sets,
+            exercise_id,
+            exercises:exercise_id (
+              id,
+              name,
+              muscle_primary,
+              muscle_secondary
+            )
           )
         `)
         .eq('user_id', user.id)
@@ -41,11 +48,24 @@ export const useWorkoutStore = create<WorkoutStore>((set) => ({
 
       if (error) throw error;
 
-      const formattedWorkouts = data?.map(workout => ({
-        ...workout,
-        exercise_count: workout.template_exercises.length,
-        set_count: workout.template_exercises.reduce((total: number, ex: any) => total + (ex.sets || 0), 0)
-      })) || [];
+      const formattedWorkouts = data?.map(workout => {
+        // Extract unique primary muscles from all exercises in the workout
+        const primaryMuscles = workout.template_exercises
+          .filter(ex => ex.exercises && ex.exercises.muscle_primary)
+          .flatMap(ex => ex.exercises.muscle_primary || [])
+          .filter(Boolean);
+        
+        // Get unique muscles only
+        const uniquePrimaryMuscles = [...new Set(primaryMuscles)];
+        
+        return {
+          ...workout,
+          // Override the muscles array with primary muscles from exercises
+          muscles: uniquePrimaryMuscles.length > 0 ? uniquePrimaryMuscles : workout.muscles || [],
+          exercise_count: workout.template_exercises.length,
+          set_count: workout.template_exercises.reduce((total: number, ex: any) => total + (ex.sets || 0), 0)
+        };
+      }) || [];
 
       set({ workouts: formattedWorkouts, needsRefresh: false });
     } catch (error: any) {

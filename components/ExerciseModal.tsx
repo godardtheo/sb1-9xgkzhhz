@@ -3,12 +3,18 @@ import { Search, X, Check } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import CategoryFilter, { CategoryOption } from './CategoryFilter';
 
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
-  equipment: string;
+  muscle_primary?: string[];
+  muscle_secondary?: string[];
+  equipment?: string[];
+  instructions?: string;
+  video_url?: string;
+  type?: string;
+  difficulty?: string;
 };
 
 type Props = {
@@ -25,9 +31,12 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
   const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryOption>('all');
 
   const muscleGroups = [
-    'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
+    'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
+    'glutes', 'hamstrings', 'lats', 'lower_back', 'quads', 'shoulders', 
+    'triceps', 'upper_back', 'upper_traps'
   ];
 
   useEffect(() => {
@@ -37,12 +46,13 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
       setSelectedExercises([]);
       setSearchQuery('');
       setSelectedMuscle('');
+      setSelectedCategory('all');
     }
   }, [visible]);
 
   useEffect(() => {
     filterExercises();
-  }, [selectedMuscle, searchQuery, exercises]);
+  }, [selectedMuscle, searchQuery, exercises, selectedCategory]);
 
   const fetchAllExercises = async () => {
     try {
@@ -78,7 +88,17 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
 
     if (selectedMuscle) {
       filtered = filtered.filter(exercise => 
-        exercise.muscle === selectedMuscle
+        exercise.muscle_primary?.includes(selectedMuscle) 
+      );
+    }
+
+    if (selectedCategory === 'favorite') {
+      filtered = filtered.filter(exercise => 
+        exercise.id && exercise.id.charAt(0) === 'a'
+      );
+    } else if (selectedCategory === 'frequent') {
+      filtered = filtered.filter(exercise => 
+        exercise.id && (exercise.id.charAt(0) === 'b' || exercise.id.charAt(0) === 'c')
       );
     }
 
@@ -91,6 +111,10 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
 
   const handleMuscleSelect = (muscle: string) => {
     setSelectedMuscle(muscle === selectedMuscle ? '' : muscle);
+  };
+
+  const handleCategoryChange = (category: CategoryOption) => {
+    setSelectedCategory(category);
   };
 
   const toggleExerciseSelection = (exerciseId: string) => {
@@ -142,6 +166,13 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
               />
             </View>
 
+            <View style={styles.categoryContainer}>
+              <CategoryFilter 
+                selectedCategory={selectedCategory}
+                onCategoryChange={handleCategoryChange}
+              />
+            </View>
+
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
@@ -161,7 +192,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
                     styles.muscleGroupText,
                     selectedMuscle === muscle && styles.selectedMuscleGroupText
                   ]}>
-                    {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                    {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
                   </Text>
                 </Pressable>
               ))}
@@ -195,7 +226,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
                         <View style={styles.exerciseContent}>
                           <View style={styles.exerciseImagePlaceholder}>
                             <Text style={styles.exerciseImageText}>
-                              {exercise.name.charAt(0).toUpperCase()}
+                              {exercise.name ? exercise.name.charAt(0).toUpperCase() : ''}
                             </Text>
                           </View>
                           <View style={styles.exerciseInfo}>
@@ -206,12 +237,17 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
                               {exercise.name}
                             </Text>
                             <View style={styles.muscleTags}>
-                              <View style={styles.muscleTag}>
-                                <Text style={styles.muscleTagText}>{exercise.muscle}</Text>
-                              </View>
-                              {exercise.equipment && (
+                              {exercise.muscle_primary && exercise.muscle_primary.length > 0 ? (
+                                exercise.muscle_primary.map((muscle, index) => (
+                                  <View key={`primary-${index}`} style={styles.muscleTag}>
+                                    <Text style={styles.muscleTagText}>
+                                      {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
+                                    </Text>
+                                  </View>
+                                ))
+                              ) : (
                                 <View style={styles.muscleTag}>
-                                  <Text style={styles.muscleTagText}>{exercise.equipment}</Text>
+                                  <Text style={styles.muscleTagText}>No muscles</Text>
                                 </View>
                               )}
                             </View>
@@ -283,7 +319,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 8,
+    paddingLeft: 20,
+    paddingTop: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',
   },
@@ -314,6 +352,10 @@ const styles = StyleSheet.create({
   },
   searchInputWeb: {
     outlineStyle: 'none',
+  },
+  categoryContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
   muscleGroupsScroll: {
     maxHeight: 40,

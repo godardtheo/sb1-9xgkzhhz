@@ -30,8 +30,9 @@ const { width, height } = Dimensions.get('window');
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
-  equipment: string;
+  muscle_primary?: string[];
+  muscle_secondary?: string[];
+  equipment?: string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -251,19 +252,10 @@ export default function LiveExerciseCard({
     return '-';
   };
 
-  // Get muscle chip color
-  const getMuscleChipColor = (muscle: string) => {
-    const muscleColors: Record<string, string> = {
-      chest: '#0e7490', // cyan
-      back: '#0f766e', // teal
-      shoulders: '#0891b2', // sky
-      legs: '#0d9488', // emerald
-      core: '#0369a1', // blue
-      biceps: '#4f46e5', // indigo
-      triceps: '#7c3aed', // violet
-      default: '#0d3d56', // default color
-    };
-    return muscleColors[muscle.toLowerCase()] || muscleColors.default;
+  // Helper to capitalize first letter
+  const capitalizeFirstLetter = (string: string) => {
+    if (!string || typeof string !== 'string') return '';
+    return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
   };
 
   // Animated styles
@@ -300,21 +292,37 @@ export default function LiveExerciseCard({
         <View style={styles.exerciseInfo}>
           <Text style={styles.exerciseName}>{exercise.name}</Text>
           <View style={styles.muscleChips}>
-            <View 
-              style={[
-                styles.muscleChip, 
-                { backgroundColor: getMuscleChipColor(exercise.muscle) }
-              ]}
-            >
-              <Text style={styles.muscleChipText}>
-                {exercise.muscle.charAt(0).toUpperCase() + exercise.muscle.slice(1)}
-              </Text>
-            </View>
-            {exercise.equipment && (
-              <View style={styles.muscleChip}>
-                <Text style={styles.muscleChipText}>{exercise.equipment}</Text>
+            {/* Primary Muscles */}
+            {exercise.muscle_primary && exercise.muscle_primary.length > 0 ? (
+              exercise.muscle_primary.map((muscle, index) => (
+                <View 
+                  key={`primary-${index}`} 
+                  style={[styles.muscleChip, styles.primaryTag]}
+                >
+                  <Text style={styles.primaryTagText}>
+                    {capitalizeFirstLetter(muscle)}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <View style={[styles.muscleChip, styles.primaryTag]}>
+                <Text style={styles.primaryTagText}>No primary muscles</Text>
               </View>
             )}
+            
+            {/* Secondary Muscles */}
+            {exercise.muscle_secondary && exercise.muscle_secondary.length > 0 && 
+              exercise.muscle_secondary.map((muscle, index) => (
+                <View 
+                  key={`secondary-${index}`} 
+                  style={[styles.muscleChip, styles.secondaryTag]}
+                >
+                  <Text style={styles.secondaryTagText}>
+                    {capitalizeFirstLetter(muscle)}
+                  </Text>
+                </View>
+              ))
+            }
           </View>
         </View>
         <View style={styles.exerciseActions}>
@@ -500,10 +508,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   muscleChip: {
-    backgroundColor: '#0d3d56',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+  },
+  primaryTag: {
+    backgroundColor: '#0d9488',
+  },
+  secondaryTag: {
+    backgroundColor: '#164e63',
+  },
+  primaryTagText: {
+    color: '#f0fdfa',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  secondaryTagText: {
+    color: '#a5f3fc',
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   muscleChipText: {
     fontSize: 12,

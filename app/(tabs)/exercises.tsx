@@ -9,7 +9,7 @@ import ExerciseCard from '@/components/ExerciseCard';
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
+  muscle_primary: string[];
   equipment: string;
   is_favorite?: boolean;
   instructions?: string;
@@ -177,7 +177,7 @@ export default function ExercisesScreen() {
     // Filter by muscle group
     if (selectedMuscle) {
       filtered = filtered.filter(exercise => 
-        exercise.muscle === selectedMuscle
+        exercise.muscle_primary && exercise.muscle_primary.includes(selectedMuscle)
       );
     }
 
@@ -213,7 +213,7 @@ export default function ExercisesScreen() {
     <ExerciseCard
       id={item.id}
       name={item.name}
-      muscle={item.muscle}
+      muscle_primary={item.muscle_primary}
       isFavorite={!!item.is_favorite}
       onPress={() => handleExercisePress(item)}
       onFavoriteToggle={handleFavoriteToggle}

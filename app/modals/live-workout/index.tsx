@@ -32,8 +32,9 @@ import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
-  equipment: string;
+  muscle_primary?: string[];
+  muscle_secondary?: string[];
+  equipment?: string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -234,7 +235,8 @@ export default function LiveWorkoutScreen() {
             exercises (
               id,
               name,
-              muscle,
+              muscle_primary,
+              muscle_secondary,
               equipment,
               instructions,
               video_url,
@@ -266,8 +268,11 @@ export default function LiveWorkoutScreen() {
               return {
                 id: item.exercises.id,
                 name: item.exercises.name,
-                muscle: item.exercises.muscle,
-                equipment: item.exercises.equipment,
+                muscle_primary: item.exercises.muscle_primary || [],
+                muscle_secondary: item.exercises.muscle_secondary || [],
+                equipment: Array.isArray(item.exercises.equipment) 
+                  ? item.exercises.equipment 
+                  : (item.exercises.equipment ? [item.exercises.equipment] : []),
                 instructions: item.exercises.instructions,
                 video_url: item.exercises.video_url,
                 type: item.exercises.type,
@@ -693,26 +698,42 @@ export default function LiveWorkoutScreen() {
   };
 
   const handleExerciseSelection = (selectedExercises: any[]) => {
-    const newExercises = selectedExercises.map((ex) => ({
-      id: ex.id,
-      name: ex.name,
-      muscle: ex.muscle,
-      equipment: ex.equipment,
-      instructions: ex.instructions,
-      video_url: ex.video_url,
-      type: ex.type,
-      difficulty: ex.difficulty,
-      sets: Array(4)
-        .fill(null)
-        .map(() => ({
-          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-          weight: '0',
-          reps: '',
-          completed: false,
-          previousWeight: '0',
-          previousReps: '0',
-        })),
-    }));
+    const newExercises = selectedExercises.map((ex) => {
+      // Vérifier et convertir les champs pour assurer le bon format
+      let muscle_primary = ex.muscle_primary || [];
+      // Gérer la compatibilité avec l'ancien format
+      if (!muscle_primary.length && ex.muscle) {
+        muscle_primary = [ex.muscle];
+      }
+
+      // Gérer le format de l'équipement
+      let equipment = ex.equipment || [];
+      if (!Array.isArray(equipment) && equipment) {
+        equipment = [equipment];
+      }
+
+      return {
+        id: ex.id,
+        name: ex.name,
+        muscle_primary: muscle_primary,
+        muscle_secondary: ex.muscle_secondary || [],
+        equipment: equipment,
+        instructions: ex.instructions,
+        video_url: ex.video_url,
+        type: ex.type,
+        difficulty: ex.difficulty,
+        sets: Array(4)
+          .fill(null)
+          .map(() => ({
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+            weight: '0',
+            reps: '',
+            completed: false,
+            previousWeight: '0',
+            previousReps: '0',
+          })),
+      };
+    });
 
     setExercises([...exercises, ...newExercises]);
     setShowExerciseModal(false);
