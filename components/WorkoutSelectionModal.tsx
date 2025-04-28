@@ -213,7 +213,7 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
                     styles.muscleGroupText,
                     selectedMuscle === muscle && styles.selectedMuscleGroupText
                   ]}>
-                    {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                    {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
                   </Text>
                 </Pressable>
               ))}
@@ -247,7 +247,7 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
                         <View style={styles.workoutContent}>
                           <View style={styles.workoutImagePlaceholder}>
                             <Text style={styles.workoutImageText}>
-                              {workout.name.charAt(0).toUpperCase()}
+                              {workout.name ? workout.name.charAt(0).toUpperCase() : 'W'}
                             </Text>
                           </View>
                           <View style={styles.workoutInfo}>
@@ -264,9 +264,9 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
                             </View>
                             <View style={styles.muscleTags}>
                               {workout.muscles && workout.muscles.slice(0, 3).map((muscle) => (
-                                <View key={muscle} style={styles.muscleTag}>
+                                <View key={muscle || 'unknown'} style={styles.muscleTag}>
                                   <Text style={styles.muscleTagText}>
-                                    {muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ')}
+                                    {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : 'Unknown'}
                                   </Text>
                                 </View>
                               ))}

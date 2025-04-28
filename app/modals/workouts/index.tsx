@@ -49,7 +49,7 @@ export default function WorkoutsScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Pressable 
-            onPress={() => router.push('/(tabs)/action')}
+            onPress={() => router.back()}
             style={styles.backButton}
             hitSlop={8}
           >
@@ -131,9 +131,9 @@ export default function WorkoutsScreen() {
                   <View style={styles.muscleChips}>
                     {workout.muscles && workout.muscles.length > 0 ? (
                       workout.muscles.slice(0, 3).map((muscle, index) => (
-                        <View key={muscle} style={styles.muscleChip}>
+                        <View key={muscle || 'unknown'} style={styles.muscleChip}>
                           <Text style={styles.muscleChipText}>
-                            {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                            {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
                           </Text>
                         </View>
                       ))

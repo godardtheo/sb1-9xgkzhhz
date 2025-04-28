@@ -357,12 +357,11 @@ export default function EditProgramScreen() {
   };
 
   const handleWorkoutInfo = (workout: Workout) => {
-    // Navigate to workout details using template_id instead of workout.id
-    if (workout.template_id) {
-      router.push(`/modals/workouts/${workout.template_id}`);
-    } else {
-      console.warn(`No template_id found for workout: ${workout.name}`);
-    }
+    // Instead of navigating to workout details, show info in an alert
+    Alert.alert(
+      workout.name,
+      `${workout.description || 'No description'}\n\nExercises: ${workout.exercise_count}\nSets: ${workout.set_count}\nEstimated duration: ${workout.estimated_duration}`
+    );
   };
 
   if (loading && workouts.length === 0) {

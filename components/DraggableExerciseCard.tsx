@@ -345,7 +345,7 @@ export default function DraggableExerciseCard({
   }, []);
   
   // Helper function for formatting muscle names
-  const capitalizeFirstLetter = (string: string) => {
+  const capitalizeFirstLetter = (string: string | undefined | null) => {
     if (!string || typeof string !== 'string') return '';
     return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
   };

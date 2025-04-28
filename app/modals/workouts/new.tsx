@@ -207,8 +207,7 @@ export default function NewWorkoutScreen() {
   };
 
   const handleExerciseInfo = (exercise: Exercise) => {
-    setSelectedExercise(exercise);
-    setShowExerciseDetails(true);
+    router.push(`/modals/exercise-details/${exercise.id}`);
   };
 
   const removeExercise = (exerciseId: string) => {
@@ -348,6 +347,8 @@ export default function NewWorkoutScreen() {
           visible={showExerciseDetails}
           onClose={() => setShowExerciseDetails(false)}
           exercise={selectedExercise}
+          isFavorite={false}
+          onFavoriteToggle={() => {}}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

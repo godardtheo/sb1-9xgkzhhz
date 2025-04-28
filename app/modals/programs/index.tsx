@@ -76,7 +76,7 @@ export default function ProgramsScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Pressable 
-            onPress={() => router.push('/(tabs)/action')}
+            onPress={() => router.back()}
             style={styles.backButton}
             hitSlop={8}
           >

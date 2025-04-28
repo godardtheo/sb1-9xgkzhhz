@@ -280,7 +280,7 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
               styles.muscleGroupText,
               selectedMuscle === muscle && styles.selectedMuscleGroupText
             ]}>
-              {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+              {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
             </Text>
           </Pressable>
         ))}

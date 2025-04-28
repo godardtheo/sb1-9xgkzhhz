@@ -488,6 +488,8 @@ export default function EditWorkoutScreen() {
         visible={showExerciseDetails}
         onClose={() => setShowExerciseDetails(false)}
         exercise={selectedExercise}
+        isFavorite={false}
+        onFavoriteToggle={() => {}}
       />
 
       <DeleteWorkoutModal

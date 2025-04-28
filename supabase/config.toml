@@ -1,0 +1,10 @@
+# Configuration pour le projet Supabase
+project_id = "rokicoqziukzgvhpoclk"
+
+[api]
+# L'URL de l'API Supabase
+endpoint = "https://rokicoqziukzgvhpoclk.supabase.co"
+
+[db]
+# Port de la base de données (pour le développement local)
+port = 54322 

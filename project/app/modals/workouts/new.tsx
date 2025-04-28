@@ -344,6 +344,8 @@ export default function NewWorkoutScreen() {
           visible={showExerciseDetails}
           onClose={() => setShowExerciseDetails(false)}
           exercise={selectedExercise}
+          isFavorite={false}
+          onFavoriteToggle={() => {}}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

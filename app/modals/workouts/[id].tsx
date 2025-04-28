@@ -245,7 +245,7 @@ export default function EditWorkoutScreen() {
       if (deleteError) throw deleteError;
 
       setNeedsRefresh(true);
-      router.replace('/modals/workouts');
+      router.back();
     } catch (error: any) {
       console.error('Error deleting workout:', error);
       setError(error.message);
@@ -255,8 +255,7 @@ export default function EditWorkoutScreen() {
   };
 
   const handleExerciseInfo = (exercise: Exercise) => {
-    setSelectedExercise(exercise);
-    setShowExerciseDetails(true);
+    router.push(`/modals/exercise-details/${exercise.id}`);
   };
 
   const handleAddExercise = async (selectedExercises: Exercise[]) => {
@@ -505,6 +504,8 @@ export default function EditWorkoutScreen() {
         visible={showExerciseDetails}
         onClose={() => setShowExerciseDetails(false)}
         exercise={selectedExercise}
+        isFavorite={false}
+        onFavoriteToggle={() => {}}
       />
 
       <DeleteWorkoutModal

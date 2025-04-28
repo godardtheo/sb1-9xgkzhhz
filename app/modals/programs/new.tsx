@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Platform, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Platform, ActivityIndicator, Switch, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Info, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
@@ -176,7 +176,7 @@ export default function NewProgramScreen() {
       // Show success message and redirect
       setSaveSuccess(true);
       setTimeout(() => {
-        router.push('/modals/programs');
+        router.back();
       }, 1500);
 
     } catch (err: any) {
@@ -197,8 +197,12 @@ export default function NewProgramScreen() {
   };
 
   const handleWorkoutInfo = (workout: SelectedWorkout) => {
-    // For now just navigate to workout details
-    router.push(`/modals/workouts/${workout.id}`);
+    // Instead of directly pushing to workout details, just show alert
+    // as navigating to another modal while in a modal is the issue
+    Alert.alert(
+      workout.name,
+      `${workout.description || 'No description'}\n\nExercises: ${workout.exercise_count}\nEstimated duration: ${workout.estimated_duration}`
+    );
   };
 
   return (

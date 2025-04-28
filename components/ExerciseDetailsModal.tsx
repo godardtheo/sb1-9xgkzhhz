@@ -245,8 +245,10 @@ export default function ExerciseDetailsModal({ visible, onClose, exercise, isFav
   const instructions = exercise.instructions?.split('\n').filter(Boolean) || [];
 
   // Helper to capitalize first letter
-  const capitalizeFirstLetter = (string: string) => {
-    return string.charAt(0).toUpperCase() + string.slice(1);
+  const capitalizeFirstLetter = (string: string | undefined | null | any) => {
+    if (!string) return '';
+    if (typeof string !== 'string') return String(string);
+    return string.charAt(0).toUpperCase() + string.slice(1).replace(/_/g, ' ');
   };
 
   return (
@@ -301,9 +303,11 @@ export default function ExerciseDetailsModal({ visible, onClose, exercise, isFav
             >
               {/* Muscle tags */}
               <View style={styles.tags}>
-                <View style={[styles.tag, styles.primaryTag]}>
-                  <Text style={styles.primaryTagText}>{capitalizeFirstLetter(exercise.muscle)}</Text>
-                </View>
+                {exercise.muscle && (
+                  <View style={[styles.tag, styles.primaryTag]}>
+                    <Text style={styles.primaryTagText}>{capitalizeFirstLetter(exercise.muscle)}</Text>
+                  </View>
+                )}
                 {exercise.type && (
                   <View style={styles.tag}>
                     <Text style={styles.tagText}>{exercise.type}</Text>

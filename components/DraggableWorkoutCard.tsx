@@ -340,9 +340,9 @@ export default function DraggableWorkoutCard({
         <View style={styles.workoutContent}>
           <View style={styles.muscleChips}>
             {workout.muscles && workout.muscles.slice(0, 3).map((muscle) => (
-              <View key={muscle} style={styles.muscleChip}>
+              <View key={muscle || 'unknown'} style={styles.muscleChip}>
                 <Text style={styles.muscleChipText}>
-                  {muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ')}
+                  {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : 'Unknown'}
                 </Text>
               </View>
             ))}
