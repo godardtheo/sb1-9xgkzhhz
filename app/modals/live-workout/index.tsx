@@ -28,13 +28,15 @@ import ConfirmationModal from '@/components/ConfirmationModal';
 import RestTimerModal from '@/components/RestTimerModal';
 import { Audio } from 'expo-av';
 import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
+import uuid from 'react-native-uuid';
 
 type Exercise = {
   id: string;
   name: string;
+  muscle: string;
   muscle_primary?: string[];
   muscle_secondary?: string[];
-  equipment?: string[];
+  equipment: string | string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -90,6 +92,8 @@ export default function LiveWorkoutScreen() {
   const displayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const cardRefs = useRef<(null | { animateMove: (direction: -1 | 1, distance: number) => void })[]>([]);
+  const [itemHeights, setItemHeights] = useState<number[]>([]);
 
   // Animated values
   const progressValue = useSharedValue(0);
@@ -698,44 +702,46 @@ export default function LiveWorkoutScreen() {
   };
 
   const handleExerciseSelection = (selectedExercises: any[]) => {
-    const newExercises = selectedExercises.map((ex) => {
-      // Vérifier et convertir les champs pour assurer le bon format
-      let muscle_primary = ex.muscle_primary || [];
-      // Gérer la compatibilité avec l'ancien format
-      if (!muscle_primary.length && ex.muscle) {
-        muscle_primary = [ex.muscle];
+    // Traite les exercices dans l'ordre exact de sélection
+    const newExercises = selectedExercises.map(exercise => {
+      // Création des sets pour chaque exercice sélectionné
+      const exerciseSets = Array(4).fill(null).map(() => ({
+        id: uuid.v4() as string,
+        weight: '0',
+        reps: '0',
+        completed: false,
+        previousWeight: '0',
+        previousReps: '0',
+      }));
+
+      // Gérer la compatibilité avec l'ancien format pour muscle_primary
+      let muscle_primary = exercise.muscle_primary || [];
+      if (!muscle_primary.length && exercise.muscle) {
+        muscle_primary = [exercise.muscle];
       }
 
       // Gérer le format de l'équipement
-      let equipment = ex.equipment || [];
+      let equipment = exercise.equipment || [];
       if (!Array.isArray(equipment) && equipment) {
         equipment = [equipment];
       }
 
       return {
-        id: ex.id,
-        name: ex.name,
+        id: exercise.id,
+        name: exercise.name,
         muscle_primary: muscle_primary,
-        muscle_secondary: ex.muscle_secondary || [],
+        muscle_secondary: exercise.muscle_secondary || [],
         equipment: equipment,
-        instructions: ex.instructions,
-        video_url: ex.video_url,
-        type: ex.type,
-        difficulty: ex.difficulty,
-        sets: Array(4)
-          .fill(null)
-          .map(() => ({
-            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-            weight: '0',
-            reps: '',
-            completed: false,
-            previousWeight: '0',
-            previousReps: '0',
-          })),
+        instructions: exercise.instructions,
+        video_url: exercise.video_url,
+        type: exercise.type,
+        difficulty: exercise.difficulty,
+        sets: exerciseSets,
       };
     });
 
-    setExercises([...exercises, ...newExercises]);
+    // Ajoute les nouveaux exercices à la fin de la liste existante, préservant l'ordre de sélection
+    setExercises(exercises => [...exercises, ...newExercises]);
     setShowExerciseModal(false);
   };
 
@@ -788,6 +794,35 @@ export default function LiveWorkoutScreen() {
       backgroundColor: '#14b8a6',
     };
   });
+
+  const updateItemHeight = (index: number, height: number) => {
+    setItemHeights(prev => {
+      const arr = [...prev];
+      arr[index] = height;
+      return arr;
+    });
+  };
+
+  const handleMoveUp = (index: number) => {
+    if (index > 0) {
+      const distance = itemHeights[index - 1] || 60;
+      cardRefs.current[index]?.animateMove(-1, distance);
+      cardRefs.current[index - 1]?.animateMove(1, itemHeights[index] || 60);
+      setTimeout(() => {
+        reorderExercises(index, index - 1);
+      }, 150);
+    }
+  };
+  const handleMoveDown = (index: number) => {
+    if (index < exercises.length - 1) {
+      const distance = itemHeights[index + 1] || 60;
+      cardRefs.current[index]?.animateMove(1, distance);
+      cardRefs.current[index + 1]?.animateMove(-1, itemHeights[index] || 60);
+      setTimeout(() => {
+        reorderExercises(index, index + 1);
+      }, 150);
+    }
+  };
 
   if (loading) {
     return (
@@ -865,6 +900,7 @@ export default function LiveWorkoutScreen() {
             exercises.map((exercise, index) => (
               <LiveExerciseCard
                 key={exercise.id}
+                ref={el => { if (el) cardRefs.current[index] = el; }}
                 exercise={exercise}
                 index={index}
                 onRemove={removeExercise}
@@ -872,8 +908,11 @@ export default function LiveWorkoutScreen() {
                 onAddSet={addSet}
                 onRemoveSet={removeSet}
                 onInfo={() => handleExerciseInfo(exercise)}
-                onReorder={reorderExercises}
+                onMoveUp={handleMoveUp}
+                onMoveDown={handleMoveDown}
+                totalExercises={exercises.length}
                 isInWorkout={true}
+                onLayout={event => updateItemHeight(index, event.nativeEvent.layout.height)}
               />
             ))
           )}

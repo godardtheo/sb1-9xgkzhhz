@@ -29,7 +29,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([]);
-  const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
+  const [selectedExerciseIds, setSelectedExerciseIds] = useState<{id: string, order: number}[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryOption>('all');
 
@@ -43,7 +43,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
     if (visible) {
       fetchAllExercises();
     } else {
-      setSelectedExercises([]);
+      setSelectedExerciseIds([]);
       setSearchQuery('');
       setSelectedMuscle('');
       setSelectedCategory('all');
@@ -118,17 +118,29 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
   };
 
   const toggleExerciseSelection = (exerciseId: string) => {
-    setSelectedExercises(prev => 
-      prev.includes(exerciseId)
-        ? prev.filter(id => id !== exerciseId)
-        : [...prev, exerciseId]
-    );
+    setSelectedExerciseIds(prev => {
+      const existingIndex = prev.findIndex(item => item.id === exerciseId);
+      
+      if (existingIndex !== -1) {
+        return prev.filter(item => item.id !== exerciseId);
+      } else {
+        return [...prev, {id: exerciseId, order: prev.length}];
+      }
+    });
   };
 
   const handleConfirm = () => {
-    const selectedItems = exercises.filter(exercise => 
-      selectedExercises.includes(exercise.id)
-    );
+    const sortedSelectedIds = [...selectedExerciseIds].sort((a, b) => a.order - b.order);
+    
+    const selectedItems: Exercise[] = [];
+    
+    sortedSelectedIds.forEach(({id}) => {
+      const exercise = exercises.find(ex => ex.id === id);
+      if (exercise) {
+        selectedItems.push(exercise);
+      }
+    });
+    
     onSelect(selectedItems);
     onClose();
   };
@@ -208,7 +220,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
                 <Text style={styles.statusText}>No exercises found</Text>
               ) : (
                 filteredExercises.map((exercise) => {
-                  const isSelected = selectedExercises.includes(exercise.id);
+                  const isSelected = selectedExerciseIds.some(item => item.id === exercise.id);
                   return (
                     <Pressable
                       key={exercise.id}
@@ -275,16 +287,16 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
               <Pressable 
                 style={[
                   styles.addButton,
-                  selectedExercises.length === 0 && styles.addButtonDisabled
+                  selectedExerciseIds.length === 0 && styles.addButtonDisabled
                 ]}
                 onPress={handleConfirm}
-                disabled={selectedExercises.length === 0}
+                disabled={selectedExerciseIds.length === 0}
               >
                 <Text style={[
                   styles.addButtonText,
-                  selectedExercises.length === 0 && styles.addButtonTextDisabled
+                  selectedExerciseIds.length === 0 && styles.addButtonTextDisabled
                 ]}>
-                  Add {selectedExercises.length} Exercise{selectedExercises.length !== 1 ? 's' : ''}
+                  Add {selectedExerciseIds.length} Exercise{selectedExerciseIds.length !== 1 ? 's' : ''}
                 </Text>
               </Pressable>
             </View>

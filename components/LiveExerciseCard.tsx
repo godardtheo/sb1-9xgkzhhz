@@ -18,11 +18,11 @@ import Animated, {
 import {
   Trash2,
   Info,
-  GripVertical,
-  Plus,
+  ArrowUp,
+  ArrowDown,
   CircleMinus,
 } from 'lucide-react-native';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Checkbox } from './Checkbox';
 
 const { width, height } = Dimensions.get('window');
@@ -60,32 +60,30 @@ type Props = {
   onAddSet: (exerciseId: string) => void;
   onRemoveSet: (exerciseId: string) => void;
   onInfo: () => void;
-  onReorder?: (fromIndex: number, toIndex: number) => void;
+  onMoveUp?: (index: number) => void;
+  onMoveDown?: (index: number) => void;
+  totalExercises?: number;
   isInWorkout?: boolean;
 };
 
 const SPRING_CONFIG = {
-  damping: 20,
-  stiffness: 200,
+  damping: 18,
+  stiffness: 180,
   mass: 0.5,
   overshootClamping: false,
   restDisplacementThreshold: 0.01,
   restSpeedThreshold: 2,
 };
 
-export default function LiveExerciseCard({
-  exercise,
-  index,
-  onRemove,
-  onSetUpdate,
-  onAddSet,
-  onRemoveSet,
-  onInfo,
-  onReorder,
-  isInWorkout = false,
-}: Props) {
+const LiveExerciseCard = forwardRef<
+  { animateMove: (direction: -1 | 1, distance: number) => void },
+  Props
+>(({ exercise, index, onRemove, onSetUpdate, onAddSet, onRemoveSet, onInfo, onMoveUp, onMoveDown, totalExercises, isInWorkout = false }, ref) => {
   // Local animated values
   const isDragging = useSharedValue(false);
+  const isMoving = useSharedValue(false);
+  const offsetY = useSharedValue(0);
+  const directionAnim = useSharedValue(0); // -1 pour up, 1 pour down
   const dragY = useSharedValue(0);
   const startY = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -165,7 +163,7 @@ export default function LiveExerciseCard({
       }
     })
     .onEnd(event => {
-      if (!isDragging.value || !onReorder) return;
+      if (!isDragging.value) return;
 
       // Stop any auto-scrolling
       if (scrollTimer.current) {
@@ -180,7 +178,9 @@ export default function LiveExerciseCard({
         (startY.value + dragY.value) / measurements.height
       );
       if (newIndex !== index && newIndex >= 0) {
-        runOnJS(onReorder)(index, newIndex);
+        if (typeof onMoveUp === 'function') {
+          onMoveUp(index);
+        }
       }
 
       // Reset animations
@@ -258,22 +258,63 @@ export default function LiveExerciseCard({
     return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
   };
 
+  // Méthode pour animer le déplacement (comme DraggableExerciseCard)
+  const animateMove = (dir: -1 | 1, distance: number) => {
+    directionAnim.value = dir;
+    offsetY.value = distance;
+    isMoving.value = true;
+    setTimeout(() => {
+      isMoving.value = false;
+      offsetY.value = 0;
+    }, 250);
+  };
+
+  useImperativeHandle(ref, () => ({
+    animateMove
+  }));
+
   // Animated styles
   const animatedStyle = useAnimatedStyle(() => {
-    if (isDragging.value) {
+    if (isMoving.value) {
       return {
-        transform: [{ translateY: dragY.value }, { scale: scale.value }],
-        zIndex: zIndex.value,
-        opacity: opacity.value,
-        shadowOpacity: 0.3,
-        elevation: 8,
+        zIndex: 20,
+        transform: [
+          { translateY: withSpring(directionAnim.value * offsetY.value, SPRING_CONFIG) },
+          { scale: withSpring(1.02, SPRING_CONFIG) },
+        ],
+        shadowColor: '#0e7490',
+        shadowOpacity: withTiming(0.25, { duration: 150 }),
+        shadowRadius: withTiming(10, { duration: 150 }),
+        elevation: 10,
       };
     }
-
+    if (isDragging.value) {
+      return {
+        zIndex: 20,
+        transform: [
+          { translateY: dragY.value },
+          { scale: withSpring(1.02, SPRING_CONFIG) },
+        ],
+        shadowColor: '#0e7490',
+        shadowOpacity: withTiming(0.25, { duration: 150 }),
+        shadowRadius: withTiming(10, { duration: 150 }),
+        elevation: 10,
+      };
+    }
     return {
       transform: [{ translateY: withSpring(0, SPRING_CONFIG) }, { scale: 1 }],
       zIndex: 1,
       opacity: 1,
+    };
+  });
+
+  // Animation de la couleur de fond (identique à DraggableExerciseCard)
+  const backgroundStyle = useAnimatedStyle(() => {
+    return {
+      backgroundColor: withTiming(
+        isMoving.value ? '#179186' : '#115e59',
+        { duration: isMoving.value ? 150 : 120 }
+      ),
     };
   });
 
@@ -285,7 +326,7 @@ export default function LiveExerciseCard({
 
   return (
     <Animated.View
-      style={[styles.container, animatedStyle]}
+      style={[styles.container as any, backgroundStyle, animatedStyle]}
       onLayout={onLayout}
     >
       <View style={styles.exerciseHeader}>
@@ -435,7 +476,7 @@ export default function LiveExerciseCard({
             style={styles.setActionButton}
             onPress={() => onAddSet(exercise.id)}
           >
-            <Plus size={16} color="#5eead4" />
+            <ArrowUp size={16} color="#5eead4" />
             <Text style={styles.setActionText}>Add Set</Text>
           </Pressable>
 
@@ -444,25 +485,28 @@ export default function LiveExerciseCard({
               style={styles.setActionButton}
               onPress={() => onRemoveSet(exercise.id)}
             >
-              <CircleMinus size={16} color="#5eead4" />
+              <ArrowDown size={16} color="#5eead4" />
               <Text style={styles.setActionText}>Remove Set</Text>
             </Pressable>
           )}
         </View>
         
-        {onReorder && (
-          <GestureDetector gesture={dragGesture}>
-            <View style={styles.dragHandleContainer}>
-              <View style={styles.dragHandle}>
-                <GripVertical size={20} color="#5eead4" />
-              </View>
-            </View>
-          </GestureDetector>
-        )}
+        <View style={styles.reorderButtonsContainer}>
+          {typeof onMoveUp === 'function' && index > 0 && (
+            <Pressable onPress={() => onMoveUp(index)} style={styles.arrowButton} hitSlop={8}>
+              <ArrowUp size={20} color="#5eead4" />
+            </Pressable>
+          )}
+          {typeof onMoveDown === 'function' && totalExercises && index < totalExercises - 1 && (
+            <Pressable onPress={() => onMoveDown(index)} style={styles.arrowButton} hitSlop={8}>
+              <ArrowDown size={20} color="#5eead4" />
+            </Pressable>
+          )}
+        </View>
       </View>
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -649,20 +693,22 @@ const styles = StyleSheet.create({
     color: '#5eead4',
     marginLeft: 8,
   },
-  dragHandleContainer: {
-    alignItems: 'center',
+  reorderButtonsContainer: {
+    flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
   },
-  dragHandle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  arrowButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#0d3d56',
     justifyContent: 'center',
     alignItems: 'center',
-    ...(Platform.OS === 'web' ? {
-      // @ts-ignore
-      cursor: 'grab',
-    } : {}),
+    marginRight: 0,
   },
 });
+
+export default LiveExerciseCard;

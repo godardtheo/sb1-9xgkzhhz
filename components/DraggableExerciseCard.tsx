@@ -1,16 +1,13 @@
-import { View, Text, StyleSheet, Pressable, Platform, TextInput, ScrollView, LayoutChangeEvent, Dimensions } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { View, Text, StyleSheet, Pressable, Platform, TextInput, ScrollView, LayoutChangeEvent } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
-  useDerivedValue,
   runOnJS,
-  SharedValue,
 } from 'react-native-reanimated';
-import { Info, Trash2, GripVertical, Plus, CircleMinus } from 'lucide-react-native';
-import { useRef, useState, useEffect } from 'react';
+import { Info, Trash2, ArrowUp, ArrowDown, Plus, CircleMinus } from 'lucide-react-native';
+import { useRef, useImperativeHandle, forwardRef } from 'react';
 
 type Exercise = {
   id: string;
@@ -33,7 +30,8 @@ type Exercise = {
 type Props = {
   exercise: Exercise;
   index: number;
-  onDragEnd: (from: number, to: number) => void;
+  onMoveUp: (index: number) => void;
+  onMoveDown: (index: number) => void;
   onRemove: (id: string) => void;
   onInfo: (exercise: Exercise) => void;
   totalExercises: number;
@@ -41,28 +39,25 @@ type Props = {
   onRemoveSet?: (exerciseId: string) => void;
   onUpdateReps?: (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => void;
   scrollRef?: React.RefObject<ScrollView>;
-  
-  // DnD props
-  activeIndex: SharedValue<number>;
-  itemOffsets: SharedValue<number[]>;
-  itemTranslations: SharedValue<number[]>;
-  updateItemHeight: (index: number, height: number) => void;
-  handleDragActive: (index: number, y: number) => number;
 };
 
 const SPRING_CONFIG = {
-  damping: 20,
-  stiffness: 200,
+  damping: 18,
+  stiffness: 180,
   mass: 0.5,
   overshootClamping: false,
   restDisplacementThreshold: 0.01,
   restSpeedThreshold: 2,
 };
 
-export default function DraggableExerciseCard({
+const DraggableExerciseCard = forwardRef<
+  { animateMove: (direction: -1 | 1, distance: number) => void },
+  Props
+>(({
   exercise,
   index,
-  onDragEnd,
+  onMoveUp,
+  onMoveDown,
   onRemove,
   onInfo,
   totalExercises,
@@ -70,249 +65,44 @@ export default function DraggableExerciseCard({
   onRemoveSet,
   onUpdateReps,
   scrollRef,
+}, ref) => {
+  // Animation values
+  const isMoving = useSharedValue(false);
+  const offsetY = useSharedValue(0);
+  const direction = useSharedValue(0); // -1 for up, 1 for down
   
-  // DnD props
-  activeIndex,
-  itemOffsets,
-  itemTranslations,
-  updateItemHeight,
-  handleDragActive,
-}: Props) {
-  // Local animated values
-  const isDragging = useSharedValue(false);
-  const dragY = useSharedValue(0);
-  const scale = useSharedValue(1);
-  const zIndex = useSharedValue(1);
-  const scrollY = useSharedValue(0);
-  const lastScrollY = useRef(0);
-  const autoScrollSpeed = useSharedValue(0);
-  const autoScrollActive = useRef(false);
-  const autoScrollFrame = useRef<number | null>(null);
-  const draggingEnabled = useSharedValue(true);
-  const touchY = useSharedValue(0); // Capture the raw touch Y position
-  
-  // Animation constants
-  const SCROLL_THRESHOLD = 120; // px from edge to trigger auto-scroll
-  const MAX_SCROLL_SPEED = 8; // Maximum scroll speed in px per frame
-  const { height: WINDOW_HEIGHT } = Dimensions.get('window');
-  
-  // Set this to false so we don't interfere with parent scroll
-  const disableDrag = useSharedValue(false);
-  
-  // Track scroll position
-  useEffect(() => {
-    if (scrollRef?.current) {
-      const scrollNode = scrollRef.current;
-      // This is a workaround since we can't directly hook into scroll events
-      const checkScrollPosition = () => {
-        if (scrollNode && 'scrollY' in scrollNode) {
-          // @ts-ignore - scrollY exists on some implementations
-          lastScrollY.current = scrollNode.scrollY || 0;
-          scrollY.value = lastScrollY.current;
-        }
-      };
-      const interval = setInterval(checkScrollPosition, 100);
-      return () => clearInterval(interval);
-    }
-  }, [scrollRef]);
-  
-  // Stop auto-scrolling function
-  const stopAutoScroll = () => {
-    autoScrollActive.current = false;
-    autoScrollSpeed.value = 0;
-    if (autoScrollFrame.current !== null) {
-      cancelAnimationFrame(autoScrollFrame.current);
-      autoScrollFrame.current = null;
-    }
-  };
-  
-  // Handle auto-scrolling
-  const handleAutoScroll = () => {
-    if (!autoScrollActive.current || !scrollRef?.current) {
-      return;
-    }
+  // Setup animation method that can be called from parent
+  const animateMove = (dir: -1 | 1, distance: number) => {
+    direction.value = dir;
+    offsetY.value = distance;
+    isMoving.value = true;
     
-    const scrollNode = scrollRef.current;
-    
-    // Apply scroll based on speed
-    if (autoScrollSpeed.value !== 0) {
-      // Calculate new scroll position
-      const newScrollY = Math.max(0, lastScrollY.current + autoScrollSpeed.value);
-      
-      // Perform scroll
-      scrollNode.scrollTo({
-        y: newScrollY,
-        animated: false,
-      });
-      
-      // Update references
-      lastScrollY.current = newScrollY;
-      scrollY.value = newScrollY;
-      
-      // Update potential drop index based on new position
-      const currentY = (itemOffsets.value[index] || 0) + dragY.value + scrollY.value;
-      handleDragActive(index, currentY);
-    }
-    
-    // Continue the animation frame loop if still active
-    if (autoScrollActive.current) {
-      autoScrollFrame.current = requestAnimationFrame(handleAutoScroll);
-    }
+    // Reset after animation
+    setTimeout(() => {
+      isMoving.value = false;
+      offsetY.value = 0;
+    }, 250);
   };
   
-  // Start auto-scrolling
-  const startAutoScroll = () => {
-    if (autoScrollActive.current || !scrollRef?.current) return;
-    
-    autoScrollActive.current = true;
-    autoScrollFrame.current = requestAnimationFrame(handleAutoScroll);
-  };
+  // Expose the animation method to parent
+  useImperativeHandle(ref, () => ({
+    animateMove
+  }));
   
-  // Update auto-scroll speed based on touch position
-  const updateAutoScrollSpeed = (touchY: number) => {
-    // Get auto-scroll zones (top and bottom of screen)
-    const topThreshold = SCROLL_THRESHOLD;
-    const bottomThreshold = WINDOW_HEIGHT - SCROLL_THRESHOLD;
-    
-    // Calculate scroll speed
-    if (touchY < topThreshold) {
-      // Scroll up - increase negative speed as we get closer to top
-      const distance = Math.max(0, topThreshold - touchY);
-      const percentage = Math.min(1, distance / SCROLL_THRESHOLD);
-      autoScrollSpeed.value = -MAX_SCROLL_SPEED * percentage;
-      if (!autoScrollActive.current) {
-        runOnJS(startAutoScroll)();
-      }
-    } else if (touchY > bottomThreshold) {
-      // Scroll down - increase positive speed as we get closer to bottom
-      const distance = Math.max(0, touchY - bottomThreshold);
-      const percentage = Math.min(1, distance / SCROLL_THRESHOLD);
-      autoScrollSpeed.value = MAX_SCROLL_SPEED * percentage;
-      if (!autoScrollActive.current) {
-        runOnJS(startAutoScroll)();
-      }
-    } else {
-      // No auto-scroll needed
-      autoScrollSpeed.value = 0;
-    }
-  };
-  
-  // Measure item height on layout
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    updateItemHeight(index, height);
-  };
-  
-  // Touch handler to detect long press for dragging
-  const longPressHandler = () => {
-    if (draggingEnabled.value) {
-      disableDrag.value = false;
-    }
-  };
-  
-  // Setup long press timer
-  useEffect(() => {
-    return () => {
-      // Clear any timers
-      disableDrag.value = true;
-    };
-  }, []);
-  
-  // Create the dragGesture that only works from the drag handle
-  const dragGesture = Gesture.Pan()
-    .activateAfterLongPress(200)
-    .onStart(() => {
-      isDragging.value = true;
-      activeIndex.value = index;
-      
-      // Visual feedback
-      scale.value = withSpring(1.03, SPRING_CONFIG);
-      zIndex.value = 1000;
-      
-      // Remember scroll position
-      if (scrollRef?.current) {
-        lastScrollY.current = scrollY.value;
-      }
-    })
-    .onUpdate((event) => {
-      if (!isDragging.value) return;
-      
-      // Update drag position
-      dragY.value = event.translationY;
-      
-      // Store absolute touch position
-      touchY.value = event.absoluteY;
-      
-      // Update auto-scroll speed based on touch position
-      runOnJS(updateAutoScrollSpeed)(event.absoluteY);
-      
-      // Calculate current absolute position
-      const currentY = (itemOffsets.value[index] || 0) + event.translationY + scrollY.value;
-      
-      // Update other cards based on dragged position
-      runOnJS(handleDragActive)(index, currentY);
-    })
-    .onEnd((event) => {
-      if (!isDragging.value) return;
-      
-      // Stop auto-scrolling
-      runOnJS(stopAutoScroll)();
-      
-      // Calculate final position
-      const finalY = (itemOffsets.value[index] || 0) + event.translationY + scrollY.value;
-      const newIndex = handleDragActive(index, finalY);
-      
-      // Reset visual state
-      scale.value = withSpring(1, SPRING_CONFIG);
-      zIndex.value = withTiming(1);
-      isDragging.value = false;
-      dragY.value = withSpring(0, SPRING_CONFIG);
-      
-      // Perform reordering if needed
-      if (newIndex !== index && newIndex >= 0 && newIndex < totalExercises) {
-        runOnJS(onDragEnd)(index, newIndex);
-      }
-    })
-    .onFinalize(() => {
-      // Reset everything
-      isDragging.value = false;
-      scale.value = withSpring(1, SPRING_CONFIG);
-      zIndex.value = withTiming(1);
-      dragY.value = withSpring(0, SPRING_CONFIG);
-      runOnJS(stopAutoScroll)();
-    });
-  
-  // Create animated styles
+  // Create animated styles for movement
   const animatedStyle = useAnimatedStyle(() => {
-    if (isDragging.value) {
-      // Actively dragging this item
-      return {
-        transform: [
-          { translateY: dragY.value },
-          { scale: scale.value }
-        ],
-        zIndex: zIndex.value,
-        shadowOpacity: 0.3,
-        elevation: 8,
-      };
-    } else if (activeIndex.value !== -1) {
-      // Another item is being dragged
-      return {
-        transform: [
-          { translateY: withSpring(itemTranslations.value[index] || 0, SPRING_CONFIG) },
-          { scale: 1 }
-        ],
-        zIndex: 1,
-      };
-    }
+    if (!isMoving.value) return {};
     
-    // No dragging happening
     return {
+      zIndex: 20,
       transform: [
-        { translateY: withSpring(0, SPRING_CONFIG) },
-        { scale: 1 }
+        { translateY: withSpring(direction.value * offsetY.value, SPRING_CONFIG) },
+        { scale: withSpring(1.02, SPRING_CONFIG) },
       ],
-      zIndex: 1,
+      shadowColor: '#0e7490',
+      shadowOpacity: withTiming(0.25, { duration: 150 }),
+      shadowRadius: withTiming(10, { duration: 150 }),
+      elevation: 10,
     };
   });
   
@@ -320,8 +110,8 @@ export default function DraggableExerciseCard({
   const backgroundStyle = useAnimatedStyle(() => {
     return {
       backgroundColor: withTiming(
-        isDragging.value ? '#134e4a' : '#115e59', 
-        { duration: 200 }
+        isMoving.value ? '#179186' : '#115e59',
+        { duration: isMoving.value ? 150 : 120 }
       ),
     };
   });
@@ -335,15 +125,6 @@ export default function DraggableExerciseCard({
     }
   };
   
-  // Clean up auto-scroll on unmount
-  useEffect(() => {
-    return () => {
-      if (autoScrollFrame.current !== null) {
-        cancelAnimationFrame(autoScrollFrame.current);
-      }
-    };
-  }, []);
-  
   // Helper function for formatting muscle names
   const capitalizeFirstLetter = (string: string | undefined | null) => {
     if (!string || typeof string !== 'string') return '';
@@ -353,7 +134,6 @@ export default function DraggableExerciseCard({
   return (
     <Animated.View 
       style={[styles.container, backgroundStyle, animatedStyle]}
-      onLayout={handleLayout}
     >
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseInfo}>
@@ -464,26 +244,32 @@ export default function DraggableExerciseCard({
           </View>
         </View>
         
-        <View style={styles.dragHandleContainer}>
-          <GestureDetector gesture={dragGesture}>
-            <Animated.View style={[
-              styles.dragHandle,
-              useAnimatedStyle(() => ({
-                backgroundColor: withTiming(
-                  isDragging.value ? '#134e4a' : '#0d3d56', 
-                  { duration: 200 }
-                ),
-                transform: [{ scale: withSpring(isDragging.value ? 1.1 : 1, SPRING_CONFIG) }]
-              }))
-            ]}>
-              <GripVertical size={20} color="#5eead4" />
-            </Animated.View>
-          </GestureDetector>
+        <View style={styles.reorderButtonsContainer}>
+          {index > 0 && (
+            <Pressable 
+              onPress={() => onMoveUp(index)} 
+              style={styles.arrowButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <ArrowUp size={20} color="#5eead4" />
+            </Pressable>
+          )}
+          {index < totalExercises - 1 && (
+            <Pressable 
+              onPress={() => onMoveDown(index)} 
+              style={styles.arrowButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <ArrowDown size={20} color="#5eead4" />
+            </Pressable>
+          )}
         </View>
       </View>
     </Animated.View>
   );
-}
+});
+
+export default DraggableExerciseCard;
 
 const styles = StyleSheet.create({
   container: {
@@ -569,21 +355,14 @@ const styles = StyleSheet.create({
   lastActionButton: {
     marginRight: 0,
   },
-  dragHandleContainer: {
-    width: 48,
-    height: 48,
+  reorderButtonsContainer: {
+    flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
-    ...Platform.select({
-      web: {
-        // Fix for cursor type error
-        // @ts-ignore
-        cursor: 'grab',
-      },
-    }),
+    gap: 10,
+    width: 48,
   },
-  dragHandle: {
+  arrowButton: {
     width: 40,
     height: 40,
     borderRadius: 20,

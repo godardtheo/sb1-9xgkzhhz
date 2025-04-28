@@ -1,14 +1,12 @@
 import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Info, Plus, CircleMinus as MinusCircle, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Info, Plus, CircleMinus as MinusCircle } from 'lucide-react-native';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import ExerciseModal from '@/components/ExerciseModal';
 import ExerciseDetailsModal from '@/components/ExerciseDetailsModal';
 import DeleteWorkoutModal from '@/components/DeleteWorkoutModal';
 import { useWorkoutStore } from '@/lib/store/workoutStore';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useExerciseReorder } from '@/hooks/useExerciseReorder';
 import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
@@ -45,27 +43,74 @@ export default function EditWorkoutScreen() {
   const { setNeedsRefresh } = useWorkoutStore();
   const scrollRef = useRef<ScrollView>(null);
   
-  const { 
-    exercises: reorderedExercises, 
-    setExercises: setReorderedExercises, 
-    handleDragEnd,
-    activeIndex,
-    itemOffsets,
-    itemTranslations,
-    updateItemHeight,
-    handleDragActive
-  } = useExerciseReorder(exercises);
+  // Store refs to exercise cards for animation
+  const exerciseRefs = useRef<Array<{animateMove: (direction: -1 | 1, distance: number) => void}>>([]);
+  // Store item heights for animation
+  const [itemHeights, setItemHeights] = useState<number[]>([]);
+  // Keep track of whether a reorder is in progress
+  const [isReordering, setIsReordering] = useState(false);
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
   const estimatedDuration = 5 + (exercises.length * 4) + (totalSets * 3);
   const formattedDuration = formatDuration(estimatedDuration);
 
-  useEffect(() => {
-    if (exercises && exercises.length > 0) {
-      setReorderedExercises(exercises);
-    }
-  }, [exercises]);
+  // Function to update item height in the array
+  const updateItemHeight = (index: number, height: number) => {
+    setItemHeights(prev => {
+      const newHeights = [...prev];
+      newHeights[index] = height;
+      return newHeights;
+    });
+  };
+
+  // Handler for moving an exercise up
+  const handleMoveUp = (index: number) => {
+    if (index <= 0 || isReordering) return;
+    
+    setIsReordering(true);
+    
+    // Animate the current item moving up
+    exerciseRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
+    // Animate the previous item moving down
+    exerciseRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
+    
+    // Update the state after animation completes
+    setTimeout(() => {
+      setExercises(prev => {
+        const newExercises = [...prev];
+        const temp = newExercises[index];
+        newExercises[index] = newExercises[index-1];
+        newExercises[index-1] = temp;
+        return newExercises;
+      });
+      setIsReordering(false);
+    }, 250);
+  };
+
+  // Handler for moving an exercise down
+  const handleMoveDown = (index: number) => {
+    if (index >= exercises.length - 1 || isReordering) return;
+    
+    setIsReordering(true);
+    
+    // Animate the current item moving down
+    exerciseRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
+    // Animate the next item moving up
+    exerciseRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
+    
+    // Update the state after animation completes
+    setTimeout(() => {
+      setExercises(prev => {
+        const newExercises = [...prev];
+        const temp = newExercises[index];
+        newExercises[index] = newExercises[index+1];
+        newExercises[index+1] = temp;
+        return newExercises;
+      });
+      setIsReordering(false);
+    }, 250);
+  };
 
   useEffect(() => {
     if (id) {
@@ -176,13 +221,13 @@ export default function EditWorkoutScreen() {
 
       if (templateError) throw templateError;
 
-      // 2. Update exercise order using reorderedExercises
-      for (let i = 0; i < reorderedExercises.length; i++) {
+      // 2. Update exercise order
+      for (let i = 0; i < exercises.length; i++) {
         const { error: exerciseError } = await supabase
           .from('template_exercises')
           .update({ order: i })
           .eq('template_id', id)
-          .eq('exercise_id', reorderedExercises[i].id);
+          .eq('exercise_id', exercises[i].id);
 
         if (exerciseError) throw exerciseError;
       }
@@ -249,8 +294,10 @@ export default function EditWorkoutScreen() {
     } catch (error: any) {
       console.error('Error deleting workout:', error);
       setError(error.message);
+      Alert.alert('Error', 'Failed to delete workout');
     } finally {
       setLoading(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -260,66 +307,89 @@ export default function EditWorkoutScreen() {
 
   const handleAddExercise = async (selectedExercises: Exercise[]) => {
     try {
+      setLoading(true);
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) throw new Error('Authentication error');
+      if (!user) throw new Error('Not authenticated');
+
       for (const exercise of selectedExercises) {
-        const { data: templateExercise, error: templateError } = await supabase
+        const existingIndex = exercises.findIndex(e => e.id === exercise.id);
+        if (existingIndex !== -1) continue; // Skip if already added
+
+        // 1. Add exercise to template_exercises
+        const { data: templateExercise, error: addError } = await supabase
           .from('template_exercises')
           .insert({
             template_id: id,
             exercise_id: exercise.id,
-            order: exercises.length
+            sets: 4, // Default number of sets
+            rest_time: '00:02:00',
+            order: exercises.length // Add at the end
           })
           .select()
           .single();
 
-        if (templateError) throw templateError;
+        if (addError) throw addError;
 
-        const defaultSets = Array(4).fill(null).map((_, index) => ({
+        // 2. Add default sets
+        const sets = Array(4).fill(null).map((_, i) => ({
           template_exercise_id: templateExercise.id,
           min_reps: 6,
           max_reps: 12,
-          order: index
+          order: i
         }));
 
-        const { data: sets, error: setsError } = await supabase
+        const { error: setsError } = await supabase
           .from('template_exercise_sets')
-          .insert(defaultSets)
-          .select();
+          .insert(sets);
 
         if (setsError) throw setsError;
-
-        const newExercise = {
-          ...exercise,
-          sets: sets.map(set => ({
-            id: set.id,
-            minReps: set.min_reps.toString(),
-            maxReps: set.max_reps.toString()
-          }))
-        };
-
-        setExercises(prev => [...prev, newExercise]);
       }
 
+      // 3. Reload workout details to get the updated exercise list
+      await fetchWorkoutDetails();
+    } catch (error: any) {
+      console.error('Error adding exercise:', error);
+      setError(error.message);
+      Alert.alert('Error', 'Failed to add exercise');
+    } finally {
+      setLoading(false);
       setShowExerciseModal(false);
-    } catch (err) {
-      console.error('Error adding exercises:', err);
-      setError('Failed to add exercises');
     }
   };
 
   const removeExercise = async (exerciseId: string) => {
     try {
-      const { error } = await supabase
+      setLoading(true);
+
+      // Find the template_exercise record for this exercise
+      const { data: templateExercise, error: findError } = await supabase
+        .from('template_exercises')
+        .select('id')
+        .eq('template_id', id)
+        .eq('exercise_id', exerciseId)
+        .single();
+
+      if (findError) throw findError;
+
+      // Delete the exercise from the template
+      const { error: deleteError } = await supabase
         .from('template_exercises')
         .delete()
-        .eq('exercise_id', exerciseId)
-        .eq('template_id', id);
+        .eq('id', templateExercise.id);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
 
+      // Update local state
       setExercises(prev => prev.filter(ex => ex.id !== exerciseId));
-    } catch (err) {
-      console.error('Error removing exercise:', err);
-      setError('Failed to remove exercise');
+    } catch (error: any) {
+      console.error('Error removing exercise:', error);
+      setError(error.message);
+      Alert.alert('Error', 'Failed to remove exercise');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -330,7 +400,6 @@ export default function EditWorkoutScreen() {
           ...ex,
           sets: ex.sets.map(set => {
             if (set.id === setId) {
-              // Validate min/max relationship
               if (type === 'min') {
                 const maxReps = parseInt(set.maxReps) || 12;
                 const minReps = parseInt(value) || 0;
@@ -381,6 +450,16 @@ export default function EditWorkoutScreen() {
     }));
   };
 
+  // Update refs array when exercises change
+  useEffect(() => {
+    exerciseRefs.current = exerciseRefs.current.slice(0, exercises.length);
+  }, [exercises.length]);
+
+  // Handle layout measurement for each card
+  const handleLayout = (index: number, height: number) => {
+    updateItemHeight(index, height);
+  };
+
   if (loading && exercises.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -401,14 +480,14 @@ export default function EditWorkoutScreen() {
         </Pressable>
         <View style={styles.titleContainer}>
           <TextInput
-            style={[styles.titleInput, Platform.OS === 'web' && styles.titleInputWeb]}
+            style={styles.titleInput}
             placeholder="Workout name"
             placeholderTextColor="#5eead4"
             value={name}
             onChangeText={setName}
           />
           <TextInput
-            style={[styles.descriptionInput, Platform.OS === 'web' && styles.descriptionInputWeb]}
+            style={styles.descriptionInput}
             placeholder="Description"
             placeholderTextColor="#5eead4"
             value={description}
@@ -439,74 +518,89 @@ export default function EditWorkoutScreen() {
         ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.exercisesList}
-        showsVerticalScrollIndicator={true}
-        scrollEnabled={true}
-        nestedScrollEnabled={true}
       >
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          {reorderedExercises.map((exercise, index) => (
-            <DraggableExerciseCard
-              key={exercise.id}
-              exercise={exercise}
-              index={index}
-              onDragEnd={handleDragEnd}
-              onRemove={removeExercise}
-              onInfo={handleExerciseInfo}
-              onUpdateReps={handleUpdateReps}
-              onAddSet={handleAddSet}
-              onRemoveSet={handleRemoveSet}
-              totalExercises={exercises.length}
-              scrollRef={scrollRef}
-              // DnD props
-              activeIndex={activeIndex}
-              itemOffsets={itemOffsets}
-              itemTranslations={itemTranslations}
-              updateItemHeight={updateItemHeight}
-              handleDragActive={handleDragActive}
-            />
-          ))}
-          <Pressable 
-            style={styles.addExerciseButton}
-            onPress={() => setShowExerciseModal(true)}
-          >
-            <Plus size={20} color="#ccfbf1" />
-            <Text style={styles.addExerciseText}>Add Exercise</Text>
-          </Pressable>
-        </GestureHandlerRootView>
+        {exercises.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Add exercises to your workout
+            </Text>
+            <Pressable 
+              style={styles.addExerciseButton}
+              onPress={() => setShowExerciseModal(true)}
+            >
+              <Plus size={20} color="#ccfbf1" />
+              <Text style={styles.addExerciseText}>Add Exercise</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            {exercises.map((exercise, index) => (
+              <DraggableExerciseCard
+                key={`${exercise.id}-${index}`}
+                ref={el => {
+                  if (el) exerciseRefs.current[index] = el;
+                }}
+                exercise={exercise}
+                index={index}
+                totalExercises={exercises.length}
+                onMoveUp={handleMoveUp}
+                onMoveDown={handleMoveDown}
+                onRemove={removeExercise}
+                onInfo={handleExerciseInfo}
+                onUpdateReps={handleUpdateReps}
+                onAddSet={handleAddSet}
+                onRemoveSet={handleRemoveSet}
+                scrollRef={scrollRef}
+              />
+            ))}
+
+            <Pressable 
+              style={styles.addExerciseButton}
+              onPress={() => setShowExerciseModal(true)}
+            >
+              <Plus size={20} color="#ccfbf1" />
+              <Text style={styles.addExerciseText}>Add Exercise</Text>
+            </Pressable>
+          </>
+        )}
       </ScrollView>
 
-      <View style={styles.bottomButtonContainer}>
+      <View style={styles.bottomBar}>
         <Pressable 
           style={styles.deleteButton}
           onPress={() => setShowDeleteModal(true)}
         >
           <Text style={styles.deleteButtonText}>Delete</Text>
         </Pressable>
-
         <Pressable 
-          style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+          style={styles.saveButton}
           onPress={handleSave}
           disabled={loading}
         >
-          <Text style={styles.saveButtonText}>Save Changes</Text>
-          <ChevronRight size={20} color="#021a19" />
+          <Text style={styles.saveButtonText}>
+            {loading ? 'Saving...' : 'Save Changes'}
+          </Text>
         </Pressable>
       </View>
 
-      <ExerciseModal
-        visible={showExerciseModal}
-        onClose={() => setShowExerciseModal(false)}
-        onSelect={handleAddExercise}
-        excludeExercises={exercises.map(e => e.id)}
-      />
+      {showExerciseModal && (
+        <ExerciseModal
+          visible={showExerciseModal}
+          onClose={() => setShowExerciseModal(false)}
+          onSelect={handleAddExercise}
+          excludeExercises={exercises.map(e => e.id)}
+        />
+      )}
 
-      <ExerciseDetailsModal
-        visible={showExerciseDetails}
-        onClose={() => setShowExerciseDetails(false)}
-        exercise={selectedExercise}
-        isFavorite={false}
-        onFavoriteToggle={() => {}}
-      />
+      {selectedExercise && (
+        <ExerciseDetailsModal
+          visible={!!selectedExercise}
+          onClose={() => setSelectedExercise(null)}
+          exercise={selectedExercise}
+          isFavorite={false}
+          onFavoriteToggle={() => {}}
+        />
+      )}
 
       <DeleteWorkoutModal
         visible={showDeleteModal}
@@ -563,9 +657,6 @@ const styles = StyleSheet.create({
     padding: 8,
     height: 40,
   },
-  titleInputWeb: {
-    outlineStyle: 'none',
-  },
   descriptionInput: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
@@ -576,9 +667,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#0d9488',
     padding: 8,
-  },
-  descriptionInputWeb: {
-    outlineStyle: 'none',
   },
   statsPanel: {
     flexDirection: 'row',
@@ -618,6 +706,17 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: Platform.OS === 'ios' ? 140 : 120,
   },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: '#5eead4',
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 16,
+  },
   addExerciseButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -634,7 +733,7 @@ const styles = StyleSheet.create({
     color: '#ccfbf1',
     marginLeft: 8,
   },
-  bottomButtonContainer: {
+  bottomBar: {
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     bottom: 24,
     left: 24,
@@ -702,8 +801,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#021a19',
-  },
-  saveButtonDisabled: {
-    opacity: 0.7,
   },
 });

@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Info, Trash2, GripVertical, Plus, CircleMinus as MinusCircle, Dumbbell, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Info, Trash2, Plus, CircleMinus as MinusCircle, Dumbbell } from 'lucide-react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import ExerciseModal from '@/components/ExerciseModal';
@@ -8,8 +8,6 @@ import ExerciseDetailsModal from '@/components/ExerciseDetailsModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native';
 import { useWorkoutStore } from '@/lib/store/workoutStore';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useExerciseReorder } from '@/hooks/useExerciseReorder';
 import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
@@ -35,39 +33,84 @@ export default function NewWorkoutScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showExerciseModal, setShowExerciseModal] = useState(false);
-  const [showExerciseDetails, setShowExerciseDetails] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { setNeedsRefresh } = useWorkoutStore();
   const scrollRef = useRef<ScrollView>(null);
-  
-  // Get all the necessary hooks from useExerciseReorder
-  const { 
-    exercises: reorderedExercises, 
-    setExercises: setReorderedExercises, 
-    handleDragEnd,
-    activeIndex,
-    itemOffsets,
-    itemTranslations,
-    updateItemHeight,
-    handleDragActive
-  } = useExerciseReorder(exercises);
+  // Store refs to exercise cards for animation
+  const exerciseRefs = useRef<Array<{animateMove: (direction: -1 | 1, distance: number) => void}>>([]);
+  // Store item heights for animation
+  const [itemHeights, setItemHeights] = useState<number[]>([]);
 
-  // Keep reorderedExercises in sync with exercises
-  useEffect(() => {
-    if (exercises && exercises.length > 0) {
-      setReorderedExercises(exercises);
-    }
-  }, [exercises]);
+  // Keep track of whether a reorder is in progress
+  const [isReordering, setIsReordering] = useState(false);
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
   const estimatedDuration = 5 + (exercises.length * 4) + (totalSets * 3);
   const formattedDuration = formatDuration(estimatedDuration);
 
+  // Function to update item height in the array
+  const updateItemHeight = (index: number, height: number) => {
+    setItemHeights(prev => {
+      const newHeights = [...prev];
+      newHeights[index] = height;
+      return newHeights;
+    });
+  };
+
+  // Handler for moving an exercise up
+  const handleMoveUp = (index: number) => {
+    if (index <= 0 || isReordering) return;
+    
+    setIsReordering(true);
+    
+    // Animate the current item moving up
+    exerciseRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
+    // Animate the previous item moving down
+    exerciseRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
+    
+    // Update the state after animation completes
+    setTimeout(() => {
+      setExercises(prev => {
+        const newExercises = [...prev];
+        const temp = newExercises[index];
+        newExercises[index] = newExercises[index-1];
+        newExercises[index-1] = temp;
+        return newExercises;
+      });
+      setIsReordering(false);
+    }, 250);
+  };
+
+  // Handler for moving an exercise down
+  const handleMoveDown = (index: number) => {
+    if (index >= exercises.length - 1 || isReordering) return;
+    
+    setIsReordering(true);
+    
+    // Animate the current item moving down
+    exerciseRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
+    // Animate the next item moving up
+    exerciseRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
+    
+    // Update the state after animation completes
+    setTimeout(() => {
+      setExercises(prev => {
+        const newExercises = [...prev];
+        const temp = newExercises[index];
+        newExercises[index] = newExercises[index+1];
+        newExercises[index+1] = temp;
+        return newExercises;
+      });
+      setIsReordering(false);
+    }, 250);
+  };
+
   const handleAddExercise = (selectedExercises: Exercise[]) => {
+    // Maintenir l'ordre exact des exercices sélectionnés
     const newExercises = selectedExercises.map(exercise => ({
       ...exercise,
       sets: Array(4).fill(null).map(() => ({
@@ -77,7 +120,7 @@ export default function NewWorkoutScreen() {
       }))
     }));
     
-    // Update exercises state
+    // Ajouter les nouveaux exercices à la fin de la liste existante
     setExercises(prev => [...prev, ...newExercises]);
     setShowExerciseModal(false);
   };
@@ -106,8 +149,7 @@ export default function NewWorkoutScreen() {
 
       if (templateError) throw templateError;
 
-      // Use reorderedExercises to preserve order
-      for (const [index, exercise] of reorderedExercises.entries()) {
+      for (const [index, exercise] of exercises.entries()) {
         if (!exercise || !exercise.id) continue; // Skip if exercise is null or missing id
         
         const { data: templateExercise, error: exerciseError } = await supabase
@@ -214,6 +256,16 @@ export default function NewWorkoutScreen() {
     setExercises(prev => prev.filter(ex => ex.id !== exerciseId));
   };
 
+  // Update refs array when exercises change
+  useEffect(() => {
+    exerciseRefs.current = exerciseRefs.current.slice(0, exercises.length);
+  }, [exercises.length]);
+
+  // Handle layout measurement for each card
+  const handleLayout = (index: number, height: number) => {
+    updateItemHeight(index, height);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView 
@@ -270,7 +322,6 @@ export default function NewWorkoutScreen() {
             ref={scrollRef}
             style={styles.scrollView}
             contentContainerStyle={styles.exercisesList}
-            showsVerticalScrollIndicator={true}
           >
             {exercises.length === 0 ? (
               <View style={styles.emptyState}>
@@ -287,28 +338,27 @@ export default function NewWorkoutScreen() {
                 </Pressable>
               </View>
             ) : (
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                {reorderedExercises.map((exercise, index) => (
+              <>
+                {exercises.map((exercise, index) => (
                   <DraggableExerciseCard
-                    key={exercise.id}
+                    key={`${exercise.id}-${index}`}
+                    ref={el => {
+                      if (el) exerciseRefs.current[index] = el;
+                    }}
                     exercise={exercise}
                     index={index}
-                    onDragEnd={handleDragEnd}
+                    totalExercises={exercises.length}
+                    onMoveUp={handleMoveUp}
+                    onMoveDown={handleMoveDown}
                     onRemove={removeExercise}
                     onInfo={handleExerciseInfo}
                     onUpdateReps={handleUpdateReps}
                     onAddSet={handleAddSet}
                     onRemoveSet={handleRemoveSet}
-                    totalExercises={exercises.length}
                     scrollRef={scrollRef}
-                    // DnD props
-                    activeIndex={activeIndex}
-                    itemOffsets={itemOffsets}
-                    itemTranslations={itemTranslations}
-                    updateItemHeight={updateItemHeight}
-                    handleDragActive={handleDragActive}
                   />
                 ))}
+
                 <Pressable 
                   style={styles.addExerciseButton}
                   onPress={() => setShowExerciseModal(true)}
@@ -316,41 +366,32 @@ export default function NewWorkoutScreen() {
                   <Plus size={20} color="#ccfbf1" />
                   <Text style={styles.addExerciseText}>Add Exercise</Text>
                 </Pressable>
-              </GestureHandlerRootView>
+              </>
             )}
           </ScrollView>
 
-          {exercises.length > 0 && (
-            <View style={styles.bottomButtonContainer}>
-              <Pressable 
-                style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={loading}
-              >
-                <Text style={styles.saveButtonText}>
-                  {loading ? 'Saving...' : 'Save Workout'}
-                </Text>
-                <ChevronRight size={20} color="#021a19" />
-              </Pressable>
-            </View>
-          )}
+          <View style={styles.bottomBar}>
+            <Pressable 
+              style={styles.saveButton}
+              onPress={handleSave}
+              disabled={loading}
+            >
+              <Text style={styles.saveButtonText}>
+                {loading ? 'Saving...' : 'Save Workout'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
+      </KeyboardAvoidingView>
 
+      {showExerciseModal && (
         <ExerciseModal
           visible={showExerciseModal}
           onClose={() => setShowExerciseModal(false)}
           onSelect={handleAddExercise}
-          excludeExercises={exercises.map(e => e.id)}
+          multiSelect={true}
         />
-
-        <ExerciseDetailsModal
-          visible={showExerciseDetails}
-          onClose={() => setShowExerciseDetails(false)}
-          exercise={selectedExercise}
-          isFavorite={false}
-          onFavoriteToggle={() => {}}
-        />
-      </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }
@@ -592,7 +633,7 @@ const styles = StyleSheet.create({
     color: '#ccfbf1',
     marginLeft: 8,
   },
-  bottomButtonContainer: {
+  bottomBar: {
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     bottom: 24,
     left: 24,

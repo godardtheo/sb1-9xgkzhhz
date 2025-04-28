@@ -4,7 +4,7 @@ type Exercise = {
   id: string;
   name: string;
   muscle: string;
-  equipment: string;
+  equipment: string | string[];
   instructions?: string;
   video_url?: string;
   type?: string;

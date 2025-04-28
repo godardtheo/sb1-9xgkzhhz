@@ -7,7 +7,6 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
 import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import DraggableWorkoutCard from '@/components/DraggableWorkoutCard';
-import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
@@ -39,6 +38,9 @@ export default function NewProgramScreen() {
   const [shouldCheckActive, setShouldCheckActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const { setNeedsRefresh, getActiveProgram } = useProgramStore();
+  const workoutRefs = useRef<Array<{ animateMove: (direction: -1 | 1, distance: number) => void }>>([]);
+  const [itemHeights, setItemHeights] = useState<number[]>([]);
+  const [isReordering, setIsReordering] = useState(false);
 
   const {
     workouts: reorderedWorkouts,
@@ -205,6 +207,36 @@ export default function NewProgramScreen() {
     );
   };
 
+  const handleMoveUp = (index: number) => {
+    if (index <= 0 || isReordering) return;
+    setIsReordering(true);
+    workoutRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
+    workoutRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
+    setTimeout(() => {
+      setSelectedWorkouts(prev => {
+        const newArr = [...prev];
+        [newArr[index-1], newArr[index]] = [newArr[index], newArr[index-1]];
+        return newArr;
+      });
+      setIsReordering(false);
+    }, 150);
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index >= selectedWorkouts.length - 1 || isReordering) return;
+    setIsReordering(true);
+    workoutRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
+    workoutRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
+    setTimeout(() => {
+      setSelectedWorkouts(prev => {
+        const newArr = [...prev];
+        [newArr[index], newArr[index+1]] = [newArr[index+1], newArr[index]];
+        return newArr;
+      });
+      setIsReordering(false);
+    }, 150);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -302,21 +334,19 @@ export default function NewProgramScreen() {
             </View>
           ) : (
             <>
-              {reorderedWorkouts.map((workout, index) => (
+              {selectedWorkouts.map((workout, index) => (
                 <DraggableWorkoutCard
                   key={workout.id}
+                  ref={el => { if (el) workoutRefs.current[index] = el; }}
                   workout={workout}
                   index={index}
-                  onDragEnd={handleDragEnd}
+                  totalWorkouts={selectedWorkouts.length}
+                  onMoveUp={handleMoveUp}
+                  onMoveDown={handleMoveDown}
                   onRemove={removeWorkout}
                   onPress={() => router.push(`/modals/workouts/${workout.id}`)}
                   onInfo={() => handleWorkoutInfo(workout)}
-                  totalWorkouts={selectedWorkouts.length}
-                  activeIndex={activeIndex}
-                  itemOffsets={itemOffsets}
-                  itemTranslations={itemTranslations}
-                  updateItemHeight={updateItemHeight}
-                  handleDragActive={handleDragActive}
+                  onLayout={event => updateItemHeight(index, event.nativeEvent.layout.height)}
                 />
               ))}
               <Pressable 

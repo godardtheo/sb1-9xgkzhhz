@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
+import DeleteProgramModal from '@/components/DeleteProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
@@ -36,10 +37,14 @@ export default function EditProgramScreen() {
   const [showMetrics, setShowMetrics] = useState(false);
   const [showWorkoutSelection, setShowWorkoutSelection] = useState(false);
   const [showActiveModal, setShowActiveModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [previousProgram, setPreviousProgram] = useState<{ id: string; name: string } | null>(null);
   const [shouldCheckActive, setShouldCheckActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const { setNeedsRefresh, getActiveProgram } = useProgramStore();
+  const workoutRefs = useRef<Array<{ animateMove: (direction: -1 | 1, distance: number) => void }>>([]);
+  const [itemHeights, setItemHeights] = useState<number[]>([]);
+  const [isReordering, setIsReordering] = useState(false);
 
   const {
     workouts: reorderedWorkouts,
@@ -279,6 +284,28 @@ export default function EditProgramScreen() {
     }
   };
 
+  const handleDelete = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { error: deleteError } = await supabase
+        .from('programs')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) throw deleteError;
+
+      setNeedsRefresh(true);
+      router.back();
+    } catch (err: any) {
+      console.error('Error deleting program:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteWorkout = async (workoutId: string) => {
     try {
       setLoading(true);
@@ -362,6 +389,36 @@ export default function EditProgramScreen() {
       workout.name,
       `${workout.description || 'No description'}\n\nExercises: ${workout.exercise_count}\nSets: ${workout.set_count}\nEstimated duration: ${workout.estimated_duration}`
     );
+  };
+
+  const handleMoveUp = (index: number) => {
+    if (index <= 0 || isReordering) return;
+    setIsReordering(true);
+    workoutRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
+    workoutRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
+    setTimeout(() => {
+      setWorkouts(prev => {
+        const newArr = [...prev];
+        [newArr[index-1], newArr[index]] = [newArr[index], newArr[index-1]];
+        return newArr;
+      });
+      setIsReordering(false);
+    }, 150);
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index >= workouts.length - 1 || isReordering) return;
+    setIsReordering(true);
+    workoutRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
+    workoutRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
+    setTimeout(() => {
+      setWorkouts(prev => {
+        const newArr = [...prev];
+        [newArr[index], newArr[index+1]] = [newArr[index+1], newArr[index]];
+        return newArr;
+      });
+      setIsReordering(false);
+    }, 150);
   };
 
   if (loading && workouts.length === 0) {
@@ -454,22 +511,19 @@ export default function EditProgramScreen() {
           contentContainerStyle={styles.workoutsList}
           showsVerticalScrollIndicator={true}
         >
-          {(reorderedWorkouts || []).map((workout, index) => (
+          {workouts.map((workout, index) => (
             <DraggableWorkoutCard
               key={workout.id}
+              ref={el => { if (el) workoutRefs.current[index] = el; }}
               workout={workout}
               index={index}
-              onDragEnd={handleDragEnd}
+              totalWorkouts={workouts.length}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
               onRemove={handleDeleteWorkout}
               onPress={() => router.push(`/modals/workouts/${workout.template_id}`)}
               onInfo={() => handleWorkoutInfo(workout)}
-              totalWorkouts={workouts.length}
-              isInProgram={true} // Flag that this is a program workout
-              activeIndex={activeIndex}
-              itemOffsets={itemOffsets}
-              itemTranslations={itemTranslations}
-              updateItemHeight={updateItemHeight}
-              handleDragActive={handleDragActive}
+              onLayout={event => updateItemHeight(index, event.nativeEvent.layout.height)}
             />
           ))}
 
@@ -494,6 +548,13 @@ export default function EditProgramScreen() {
 
       {workouts.length > 0 && (
         <View style={styles.bottomButtonContainer}>
+          <Pressable 
+            style={styles.deleteButton}
+            onPress={() => setShowDeleteModal(true)}
+          >
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </Pressable>
+
           <Pressable 
             style={[styles.saveButton, loading && styles.saveButtonDisabled]}
             onPress={handleSave}
@@ -534,6 +595,14 @@ export default function EditProgramScreen() {
         }}
         previousProgramName={previousProgram?.name || ''}
       />
+
+      <DeleteProgramModal
+        visible={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        loading={loading}
+        programName={name}
+      />
     </View>
   );
 }
@@ -542,6 +611,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#021a19',
+    ...Platform.select({
+      web: {
+        // @ts-ignore
+        cursor: 'default',
+        // @ts-ignore
+        userSelect: 'none',
+      },
+    }),
   },
   loadingContainer: {
     flex: 1,
@@ -711,6 +788,35 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: 'transparent',
     zIndex: 100,
+  },
+  deleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#450a0a',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    minHeight: 56,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+        elevation: 12,
+      },
+    }),
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ef4444',
   },
   saveButton: {
     flex: 1,
