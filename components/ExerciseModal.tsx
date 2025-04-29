@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Modal, Pressable, TextInput, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, TextInput, ScrollView, Platform, ActivityIndicator, ViewStyle, TextStyle, ImageStyle, StyleProp } from 'react-native';
 import { Search, X, Check } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,7 @@ type Exercise = {
   video_url?: string;
   type?: string;
   difficulty?: string;
+  is_favorite?: boolean;
 };
 
 type Props = {
@@ -32,46 +33,126 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<{id: string, order: number}[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryOption>('all');
+  const [error, setError] = useState<string | null>(null);
 
   const muscleGroups = [
     'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
     'glutes', 'hamstrings', 'lats', 'lower_back', 'quads', 'shoulders', 
-    'triceps', 'upper_back', 'upper_traps'
+    'triceps', 'upper back', 'upper traps'
   ];
 
   useEffect(() => {
     if (visible) {
-      fetchAllExercises();
-    } else {
       setSelectedExerciseIds([]);
       setSearchQuery('');
       setSelectedMuscle('');
       setSelectedCategory('all');
+    } else {
+      setExercises([]);
+      setFilteredExercises([]);
+      setSelectedExerciseIds([]);
+      setSearchQuery('');
+      setSelectedMuscle('');
+      setSelectedCategory('all');
+      setError(null);
+      setLoading(false);
     }
   }, [visible]);
 
   useEffect(() => {
-    filterExercises();
-  }, [selectedMuscle, searchQuery, exercises, selectedCategory]);
+    if (visible) {
+      fetchExercises();
+    }
+  }, [selectedCategory, visible]);
 
-  const fetchAllExercises = async () => {
+  useEffect(() => {
+    filterExercises();
+  }, [searchQuery, selectedMuscle, exercises]);
+
+  const fetchExercises = async () => {
+    if (!visible) return;
+
     try {
       setLoading(true);
-      let query = supabase
-        .from('exercises')
-        .select('*')
-        .order('name');
+      setError(null);
+      setExercises([]);
+      setFilteredExercises([]);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('No authenticated user found');
+      }
+
+      const { data: favoritesData, error: favoritesError } = await supabase
+        .from('user_favorite_exercises')
+        .select('exercise_id')
+        .eq('user_id', user.id);
+
+      if (favoritesError) throw favoritesError;
+      const favoriteIds = new Set(favoritesData?.map(fav => fav.exercise_id) || []);
+
+      let query = supabase.from('exercises').select('*');
 
       if (excludeExercises.length > 0) {
         query = query.not('id', 'in', `(${excludeExercises.join(',')})`);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      let fetchedExercises: Exercise[] = [];
+
+      if (selectedCategory === 'all') {
+        const { data, error } = await query.order('name');
+        if (error) throw error;
+        fetchedExercises = data || [];
+      }
+      else if (selectedCategory === 'favorite') {
+         if (favoriteIds.size > 0) {
+          const { data, error } = await query
+            .in('id', Array.from(favoriteIds))
+            .order('name');
+          if (error) throw error;
+          fetchedExercises = data?.map(ex => ({ ...ex, is_favorite: true })) || [];
+        } else {
+          fetchedExercises = [];
+        }
+      }
+      else if (selectedCategory === 'frequent') {
+        const { data: frequentIdsData, error: rpcError } = await supabase
+          .rpc('get_frequent_exercises');
+
+        if (rpcError) throw rpcError;
+
+        if (frequentIdsData && frequentIdsData.length > 0) {
+          const exerciseIds = frequentIdsData.map((item: any) => item.exercise_id);
+          const validIds = exerciseIds.filter((id: string) => !excludeExercises.includes(id));
+
+          if (validIds.length > 0) {
+            const { data, error } = await supabase
+              .from('exercises')
+              .select('*')
+              .in('id', validIds)
+              .order('name');
+            if (error) throw error;
+            fetchedExercises = data || [];
+          } else {
+            fetchedExercises = [];
+          }
+        } else {
+          fetchedExercises = [];
+        }
+      }
+
+      if (selectedCategory !== 'favorite') {
+        fetchedExercises = fetchedExercises.map(exercise => ({
+          ...exercise,
+          is_favorite: favoriteIds.has(exercise.id)
+        }));
+      }
       
-      setExercises(data || []);
-    } catch (error) {
-      console.error('Error fetching exercises:', error);
+      setExercises(fetchedExercises);
+
+    } catch (err: any) {
+      console.error('Error fetching exercises:', err);
+      setError(err.message || 'Failed to load exercises');
     } finally {
       setLoading(false);
     }
@@ -80,25 +161,15 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
   const filterExercises = () => {
     let filtered = [...exercises];
 
-    if (searchQuery) {
-      filtered = filtered.filter(exercise => 
+    if (searchQuery && searchQuery.length >= 1) {
+      filtered = filtered.filter(exercise =>
         exercise.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
     if (selectedMuscle) {
-      filtered = filtered.filter(exercise => 
-        exercise.muscle_primary?.includes(selectedMuscle) 
-      );
-    }
-
-    if (selectedCategory === 'favorite') {
-      filtered = filtered.filter(exercise => 
-        exercise.id && exercise.id.charAt(0) === 'a'
-      );
-    } else if (selectedCategory === 'frequent') {
-      filtered = filtered.filter(exercise => 
-        exercise.id && (exercise.id.charAt(0) === 'b' || exercise.id.charAt(0) === 'c')
+      filtered = filtered.filter(exercise =>
+        exercise.muscle_primary?.includes(selectedMuscle)
       );
     }
 
@@ -143,6 +214,23 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
     
     onSelect(selectedItems);
     onClose();
+  };
+
+  const handleFavoriteToggle = async (exerciseId: string, currentIsFavorite: boolean) => {
+    const updateState = (list: Exercise[]) => list.map(ex =>
+      ex.id === exerciseId ? { ...ex, is_favorite: !currentIsFavorite } : ex
+    );
+    setExercises(updateState);
+    setFilteredExercises(updateState);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (!currentIsFavorite) {
+      await supabase.from('user_favorite_exercises').insert({ user_id: user.id, exercise_id: exerciseId });
+    } else {
+      await supabase.from('user_favorite_exercises').delete().match({ user_id: user.id, exercise_id: exerciseId });
+    }
   };
 
   return (
@@ -215,9 +303,23 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
               contentContainerStyle={styles.exercisesListContent}
             >
               {loading ? (
-                <Text style={styles.statusText}>Loading exercises...</Text>
+                <ActivityIndicator size="large" color="#14b8a6" style={{ marginTop: 20 }}/>
+              ) : error ? (
+                 <View style={styles.centeredMessage}>
+                   <Text style={styles.errorText}>{error}</Text>
+                   <Pressable style={styles.retryButton} onPress={fetchExercises}>
+                     <Text style={styles.retryButtonText}>Retry</Text>
+                   </Pressable>
+                 </View>
               ) : filteredExercises.length === 0 ? (
-                <Text style={styles.statusText}>No exercises found</Text>
+                <View style={styles.centeredMessage}>
+                  <Text style={styles.statusText}>
+                    {searchQuery || selectedMuscle ? 'No matching exercises found' : 
+                     selectedCategory === 'favorite' ? 'No favorite exercises yet' :
+                     selectedCategory === 'frequent' ? 'No frequent exercises recorded yet' :
+                     'No exercises found for this category'}
+                  </Text>
+                </View>
               ) : (
                 filteredExercises.map((exercise) => {
                   const isSelected = selectedExerciseIds.some(item => item.id === exercise.id);
@@ -250,7 +352,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
                             </Text>
                             <View style={styles.muscleTags}>
                               {exercise.muscle_primary && exercise.muscle_primary.length > 0 ? (
-                                exercise.muscle_primary.map((muscle, index) => (
+                                exercise.muscle_primary.slice(0, 3).map((muscle, index) => (
                                   <View key={`primary-${index}`} style={styles.muscleTag}>
                                     <Text style={styles.muscleTagText}>
                                       {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
@@ -312,21 +414,21 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     backgroundColor: 'transparent',
-  },
+  } as ViewStyle,
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(2, 26, 25, 0.8)',
-  },
+  } as ViewStyle,
   modalContainer: {
     backgroundColor: '#031A19',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     height: '90%',
     overflow: 'hidden',
-  },
+  } as ViewStyle,
   modalContent: {
     flex: 1,
-  },
+  } as ViewStyle,
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -336,15 +438,15 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',
-  },
+  } as ViewStyle,
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
-  },
+  } as TextStyle,
   closeButton: {
     padding: 4,
-  },
+  } as ViewStyle,
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -352,72 +454,74 @@ const styles = StyleSheet.create({
     margin: 16,
     borderRadius: 12,
     padding: 12,
-  },
+  } as ViewStyle,
   searchInput: {
     flex: 1,
     color: '#ccfbf1',
     marginLeft: 12,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    height: Platform.OS === 'web' ? 24 : 'auto',
-    padding: 0,
-  },
+    paddingVertical: Platform.OS === 'web' ? 0 : undefined,
+  } as TextStyle,
   searchInputWeb: {
     outlineStyle: 'none',
-  },
+  } as TextStyle,
   categoryContainer: {
     paddingHorizontal: 16,
     marginBottom: 8,
-  },
+  } as ViewStyle,
   muscleGroupsScroll: {
     maxHeight: 40,
-  },
+    marginBottom: 12,
+  } as ViewStyle,
   muscleGroupsContent: {
     paddingHorizontal: 16,
     gap: 8,
-  },
+    alignItems: 'center',
+  } as ViewStyle,
   muscleGroupButton: {
     backgroundColor: '#115e59',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-  },
+  } as ViewStyle,
   selectedMuscleGroup: {
     backgroundColor: '#14b8a6',
-  },
+  } as ViewStyle,
   muscleGroupText: {
     color: '#5eead4',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-  },
+  } as TextStyle,
   selectedMuscleGroupText: {
     color: '#042f2e',
-  },
+  } as TextStyle,
   exercisesList: {
     flex: 1,
-  },
+  } as ViewStyle,
   exercisesListContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 4,
     paddingBottom: Platform.OS === 'ios' ? 100 : 80,
-  },
+  } as ViewStyle,
   exerciseItemContainer: {
     marginBottom: 12,
-  },
+  } as ViewStyle,
   exerciseItem: {
     backgroundColor: '#115e59',
     borderRadius: 12,
     overflow: 'hidden',
-  },
+  } as ViewStyle,
   exerciseItemSelected: {
     backgroundColor: '#134e4a',
     borderWidth: 1,
     borderColor: '#14b8a6',
-  },
+  } as ViewStyle,
   exerciseContent: {
     flexDirection: 'row',
     padding: 16,
     alignItems: 'center',
-  },
+  } as ViewStyle,
   exerciseImagePlaceholder: {
     width: 48,
     height: 48,
@@ -425,44 +529,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d9488',
     justifyContent: 'center',
     alignItems: 'center',
-  },
+  } as ViewStyle,
   exerciseImageText: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#f0fdfa',
-  },
+  } as TextStyle,
   exerciseInfo: {
     flex: 1,
     marginLeft: 12,
     marginRight: 12,
-  },
+  } as ViewStyle,
   exerciseName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
     marginBottom: 6,
-  },
+  } as TextStyle,
   muscleTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-  },
+  } as ViewStyle,
   muscleTag: {
     backgroundColor: '#0d9488',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-  },
+  } as ViewStyle,
   muscleTagText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#f0fdfa',
-  },
+  } as TextStyle,
   checkmarkContainer: {
     width: 24,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-  },
+  } as ViewStyle,
   checkmark: {
     width: 24,
     height: 24,
@@ -470,13 +575,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdfa',
     justifyContent: 'center',
     alignItems: 'center',
-  },
+  } as ViewStyle,
   statusText: {
     color: '#5eead4',
     textAlign: 'center',
     marginTop: 20,
     fontFamily: 'Inter-Regular',
-  },
+    fontSize: 16,
+  } as TextStyle,
+  centeredMessage: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    minHeight: 150,
+  } as ViewStyle,
+  errorText: {
+    color: '#ef4444',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontFamily: 'Inter-Medium',
+    fontSize: 16,
+  } as TextStyle,
+  retryButton: {
+    backgroundColor: '#14b8a6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  } as ViewStyle,
+  retryButtonText: {
+    color: '#042f2e',
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+  } as TextStyle,
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -487,22 +618,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#031A19',
     borderTopWidth: 1,
     borderTopColor: '#115e59',
-  },
+  } as ViewStyle,
   addButton: {
     backgroundColor: '#14b8a6',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-  },
+  } as ViewStyle,
   addButtonDisabled: {
     backgroundColor: '#115e59',
-  },
+  } as ViewStyle,
   addButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#021a19',
-  },
+  } as TextStyle,
   addButtonTextDisabled: {
     color: '#5eead4',
-  },
+  } as TextStyle,
 });
+
+type Styles = typeof styles;
+type StyleValue<K extends keyof Styles> = StyleProp<
+  Styles[K] extends ViewStyle ? ViewStyle :
+  Styles[K] extends TextStyle ? TextStyle :
+  Styles[K] extends ImageStyle ? ImageStyle : never
+>;
+
+const typedStyles: { [K in keyof Styles]: StyleValue<K> } = styles;

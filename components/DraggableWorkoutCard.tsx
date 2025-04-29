@@ -13,14 +13,21 @@ import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 're
 import { supabase } from '@/lib/supabase';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 
+// Define the structure for muscle counts, mirroring the definition in parent screens
+type MuscleCount = {
+  muscle: string;
+  setCount: number;
+};
+
 type Workout = {
   id: string;
   name: string;
   description: string | null;
-  muscles: string[];
+  muscles: string[]; // Keep basic list for now, might be unused depending on final implementation
+  musclesWithCounts: MuscleCount[]; // Expect the sorted list with counts
   estimated_duration: string;
-  exercise_count: number;
-  set_count?: number;
+  exercise_count?: number; // Keep optional as parent might not always provide it
+  set_count?: number; // Total set count
   template_id?: string; // Added for program workout reference
 };
 
@@ -121,14 +128,14 @@ const DraggableWorkoutCard = forwardRef<
         </View>
         <View style={styles.workoutContent}>
           <View style={styles.muscleChips}>
-            {workout.muscles && workout.muscles.slice(0, 3).map((muscle) => (
-              <View key={muscle || 'unknown'} style={styles.muscleChip}>
-                <Text style={styles.muscleChipText}>{capitalizeFirstLetter(muscle)}</Text>
+            {workout.musclesWithCounts && workout.musclesWithCounts.slice(0, 2).map((muscleInfo) => (
+              <View key={muscleInfo.muscle || 'unknown'} style={styles.muscleChip}>
+                <Text style={styles.muscleChipText}>{capitalizeFirstLetter(muscleInfo.muscle)}</Text>
               </View>
             ))}
-            {workout.muscles && workout.muscles.length > 3 && (
+            {workout.musclesWithCounts && workout.musclesWithCounts.length > 2 && (
               <View style={[styles.muscleChip, styles.moreChip]}>
-                <Text style={styles.muscleChipText}>+{workout.muscles.length - 3}</Text>
+                <Text style={styles.muscleChipText}>+{workout.musclesWithCounts.length - 2}</Text>
               </View>
             )}
           </View>

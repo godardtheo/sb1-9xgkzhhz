@@ -12,11 +12,20 @@ import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
 
+// Type for data coming FROM ExerciseModal
+type ModalExerciseSelection = {
+  id: string;
+  name: string;
+  muscle?: string; // Inclure les champs connus retournés par le modal
+  equipment?: string; // Peut être un string ou string[] selon le modal, ajuster si besoin
+  // ... autres champs possibles
+};
+
 type Exercise = {
   id: string;
   name: string;
-  muscle: string;
-  equipment: string;
+  muscle?: string; // Rendu optionnel pour correspondre à DraggableExerciseCard
+  equipment: string; // Gardé comme string ici, mais attention aux incohérences
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -109,10 +118,16 @@ export default function NewWorkoutScreen() {
     }, 250);
   };
 
-  const handleAddExercise = (selectedExercises: Exercise[]) => {
+  // Update signature to accept simpler type from Modal
+  const handleAddExercise = (selectedExercises: ModalExerciseSelection[]) => {
     // Maintenir l'ordre exact des exercices sélectionnés
-    const newExercises = selectedExercises.map(exercise => ({
-      ...exercise,
+    const newExercises = selectedExercises.map(exerciseSelection => ({
+      // Construire l'objet Exercise complet à partir de la sélection
+      id: exerciseSelection.id,
+      name: exerciseSelection.name,
+      muscle: exerciseSelection.muscle || 'N/A', // Fournir une valeur par défaut si muscle est requis mais optionnel dans la sélection
+      equipment: exerciseSelection.equipment || 'Bodyweight', // Fournir valeur par défaut
+      // Ajouter les autres champs par défaut si nécessaire
       sets: Array(4).fill(null).map(() => ({
         id: uuid.v4(),
         minReps: '6',
@@ -191,34 +206,43 @@ export default function NewWorkoutScreen() {
     }
   };
 
-  const handleUpdateReps = (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => {
+  // Nouvelle fonction pour gérer la mise à jour de la valeur pendant la frappe
+  const handleRepInputChange = (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => {
     setExercises(prev => prev.map(ex => {
       if (ex.id === exerciseId) {
         return {
           ...ex,
           sets: ex.sets.map(set => {
             if (set.id === setId) {
-              if (type === 'min') {
-                const maxReps = parseInt(set.maxReps) || 12;
-                const minReps = parseInt(value) || 0;
-                return {
-                  ...set,
-                  minReps: value,
-                  maxReps: maxReps < minReps ? value : set.maxReps
-                };
-              } else {
-                const minReps = parseInt(set.minReps) || 6;
-                const maxReps = parseInt(value) || 0;
-                return {
-                  ...set,
-                  maxReps: value,
-                  minReps: maxReps < minReps ? value : set.minReps
-                };
-              }
+              return { ...set, [type === 'min' ? 'minReps' : 'maxReps']: value };
             }
             return set;
           })
         };
+      }
+      return ex;
+    }));
+  };
+
+  // Nouvelle fonction pour valider et corriger les reps au blur
+  const validateAndCorrectReps = (exerciseId: string, setId: string) => {
+    setExercises(prev => prev.map(ex => {
+      if (ex.id === exerciseId) {
+        const updatedSets = ex.sets.map(set => {
+          if (set.id === setId) {
+            // Assurer que les valeurs sont des nombres ou 0 si vide/invalide
+            const minReps = parseInt(set.minReps) || 0;
+            const maxReps = parseInt(set.maxReps) || 0;
+
+            // Valider seulement si les deux champs ont une valeur valide et min > max
+            if (set.minReps !== '' && set.maxReps !== '' && minReps > maxReps) {
+              // Corriger minReps pour qu'il soit égal à maxReps
+              return { ...set, minReps: maxReps.toString() };
+            }
+          }
+          return set;
+        });
+        return { ...ex, sets: updatedSets };
       }
       return ex;
     }));
@@ -352,7 +376,8 @@ export default function NewWorkoutScreen() {
                     onMoveDown={handleMoveDown}
                     onRemove={removeExercise}
                     onInfo={handleExerciseInfo}
-                    onUpdateReps={handleUpdateReps}
+                    onRepInputChange={handleRepInputChange}
+                    onRepInputBlur={validateAndCorrectReps}
                     onAddSet={handleAddSet}
                     onRemoveSet={handleRemoveSet}
                     scrollRef={scrollRef}
@@ -437,6 +462,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   titleInputWeb: {
+    // @ts-ignore
     outlineStyle: 'none',
   },
   descriptionInput: {
@@ -451,6 +477,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   descriptionInputWeb: {
+    // @ts-ignore
     outlineStyle: 'none',
   },
   statsPanel: {
@@ -593,11 +620,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
+    ...Platform.select({
+      web: {
+        // @ts-ignore
+        outlineStyle: 'none',
+        // @ts-ignore
+        cursor: 'text',
+      },
+    }),
   },
   setText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
+    elevation: 12,
   },
   setActions: {
     flexDirection: 'row',

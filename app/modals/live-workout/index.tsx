@@ -1004,7 +1004,6 @@ export default function LiveWorkoutScreen() {
         onTimeSelected={(time) => {
           setRestTime(time);
           setActiveRestTime(time);
-          setShowRestTimerModal(false);
 
           // Restart timer with new time
           if (isRestTimerActive) {

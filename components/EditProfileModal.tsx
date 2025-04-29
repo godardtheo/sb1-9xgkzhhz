@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Platform, Image, ViewStyle, TextStyle, ImageStyle, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { X, Camera, Upload, ChevronDown } from 'lucide-react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -31,8 +31,6 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(userData.avatar_url);
-  const [uploading, setUploading] = useState(false);
 
   // Reset state when modal becomes visible with new userData
   useEffect(() => {
@@ -41,7 +39,6 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
       setUsername(userData.username || '');
       setHeight(userData.height?.toString() || '');
       setGender(userData.gender as Gender || '');
-      setAvatarUrl(userData.avatar_url);
       setError(null);
       setSuccess(false);
     }
@@ -61,7 +58,6 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
         username,
         height: height ? parseFloat(height) : null,
         gender: gender || null,
-        avatar_url: avatarUrl,
         updated_at: new Date().toISOString(),
       };
 
@@ -86,68 +82,6 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
     }
   };
 
-  const handlePickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        setUploading(true);
-        setError(null);
-
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
-
-        // Create a unique file path for the avatar
-        const fileExt = result.assets[0].uri.split('.').pop();
-        const filePath = `${user.id}-${Date.now()}.${fileExt}`;
-
-        // For React Native, we need to read the file as base64
-        const fileBase64 = await FileSystem.readAsStringAsync(result.assets[0].uri, { 
-          encoding: FileSystem.EncodingType.Base64 
-        });
-
-        // Upload the file to Supabase Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, decode(fileBase64), {
-            contentType: `image/${fileExt}`,
-            upsert: true
-          });
-
-        if (uploadError) throw uploadError;
-
-        // Get the public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(filePath);
-
-        // Update state with the new avatar URL
-        setAvatarUrl(publicUrl);
-      }
-    } catch (err: any) {
-      console.error('Error uploading image:', err);
-      setError(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // Helper function to decode base64
-  function decode(base64: string) {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
-  }
-
   return (
     <Modal
       visible={visible}
@@ -162,151 +96,133 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
           entering={SlideInDown.springify().damping(15)}
           exiting={SlideOutDown.springify().damping(15)}
         >
-          <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Edit Profile</Text>
-              <Pressable 
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
-            </View>
-
-            <View style={styles.form}>
-              <Pressable style={styles.avatarButton} onPress={handlePickImage}>
-                <View style={styles.avatarContainer}>
-                  {avatarUrl ? (
-                    <Image
-                      source={{ uri: avatarUrl }}
-                      style={styles.avatar}
-                    />
-                  ) : (
-                    <Camera size={32} color="#5eead4" />
-                  )}
-                </View>
-                <View style={styles.uploadButton}>
-                  {uploading ? (
-                    <ActivityIndicator size="small" color="#021a19" />
-                  ) : (
-                    <Upload size={16} color="#021a19" />
-                  )}
-                </View>
-              </Pressable>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Full Name</Text>
-                <TextInput
-                  style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholder="Enter your full name"
-                  placeholderTextColor="#5eead4"
-                />
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.modalContent}>
+              <View style={styles.header}>
+                <Text style={styles.title}>Edit Profile</Text>
+                <Pressable 
+                  onPress={onClose}
+                  style={styles.closeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <X size={24} color="#5eead4" />
+                </Pressable>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Username</Text>
-                <TextInput
-                  style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="Choose a username"
-                  placeholderTextColor="#5eead4"
-                />
-              </View>
-
-              <View style={styles.rowInputs}>
-                <View style={[styles.inputGroup, styles.flexHalf]}>
-                  <Text style={styles.label}>Height (cm)</Text>
+              <View style={styles.form}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Full Name</Text>
                   <TextInput
                     style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
-                    value={height}
-                    onChangeText={(value) => {
-                      const filtered = value.replace(/[^0-9.]/g, '');
-                      const parts = filtered.split('.');
-                      if (parts.length > 2) return;
-                      setHeight(filtered);
-                    }}
-                    placeholder="Enter height"
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Enter your full name"
                     placeholderTextColor="#5eead4"
-                    keyboardType="decimal-pad"
-                    inputMode="decimal"
                   />
                 </View>
 
-                <View style={[styles.inputGroup, styles.flexHalf]}>
-                  <Text style={styles.label}>Gender</Text>
-                  <View style={styles.dropdownContainer}>
-                    <Pressable
-                      style={[styles.input, styles.selectInput]}
-                      onPress={() => setShowGenderDropdown(!showGenderDropdown)}
-                    >
-                      <Text style={[styles.selectText, !gender && styles.placeholderText]}>
-                        {gender || 'Gender'}
-                      </Text>
-                      <ChevronDown size={20} color="#5eead4" />
-                    </Pressable>
-                    
-                    {showGenderDropdown && (
-                      <Animated.View 
-                        style={[styles.dropdown]}
-                        entering={FadeIn.duration(200)}
-                        layout={Layout.springify()}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Username</Text>
+                  <TextInput
+                    style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
+                    value={username}
+                    onChangeText={setUsername}
+                    placeholder="Choose a username"
+                    placeholderTextColor="#5eead4"
+                  />
+                </View>
+
+                <View style={styles.rowInputs}>
+                  <View style={[styles.inputGroup, styles.flexHalf]}>
+                    <Text style={styles.label}>Height (cm)</Text>
+                    <TextInput
+                      style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
+                      value={height}
+                      onChangeText={(value) => {
+                        const filtered = value.replace(/[^0-9.]/g, '');
+                        const parts = filtered.split('.');
+                        if (parts.length > 2) return;
+                        setHeight(filtered);
+                      }}
+                      placeholder="Enter height"
+                      placeholderTextColor="#5eead4"
+                      keyboardType="decimal-pad"
+                      inputMode="decimal"
+                    />
+                  </View>
+
+                  <View style={[styles.inputGroup, styles.flexHalf]}>
+                    <Text style={styles.label}>Gender</Text>
+                    <View style={styles.dropdownContainer}>
+                      <Pressable
+                        style={[styles.input, styles.selectInput]}
+                        onPress={() => setShowGenderDropdown(!showGenderDropdown)}
                       >
-                        {GENDER_OPTIONS.map((option) => (
-                          <Pressable
-                            key={option}
-                            style={[
-                              styles.dropdownItem,
-                              gender === option && styles.dropdownItemSelected
-                            ]}
-                            onPress={() => {
-                              setGender(option);
-                              setShowGenderDropdown(false);
-                            }}
-                          >
-                            <Text style={[
-                              styles.dropdownText,
-                              gender === option && styles.dropdownTextSelected
-                            ]}>
-                              {option}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </Animated.View>
-                    )}
+                        <Text style={[styles.selectText, !gender && styles.placeholderText]}>
+                          {gender || 'Gender'}
+                        </Text>
+                        <ChevronDown size={20} color="#5eead4" />
+                      </Pressable>
+                      
+                      {showGenderDropdown && (
+                        <Animated.View 
+                          style={[styles.dropdown]}
+                          entering={FadeIn.duration(200)}
+                          layout={Layout.springify()}
+                        >
+                          {GENDER_OPTIONS.map((option) => (
+                            <Pressable
+                              key={option}
+                              style={[
+                                styles.dropdownItem,
+                                gender === option && styles.dropdownItemSelected
+                              ]}
+                              onPress={() => {
+                                setGender(option);
+                                setShowGenderDropdown(false);
+                              }}
+                            >
+                              <Text style={[
+                                styles.dropdownText,
+                                gender === option && styles.dropdownTextSelected
+                              ]}>
+                                {option}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </Animated.View>
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              {error && (
-                <Text style={styles.errorText}>{error}</Text>
-              )}
-
-              {success && (
-                <Animated.View 
-                  style={styles.successMessage}
-                  entering={FadeIn.duration(200)}
-                >
-                  <Text style={styles.successText}>Profile updated successfully!</Text>
-                </Animated.View>
-              )}
-
-              <Pressable 
-                style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                onPress={handleUpdateProfile}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#021a19" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                {error && (
+                  <Text style={styles.errorText}>{error}</Text>
                 )}
-              </Pressable>
+
+                {success && (
+                  <Animated.View 
+                    style={styles.successMessage}
+                    entering={FadeIn.duration(200)}
+                  >
+                    <Text style={styles.successText}>Profile updated successfully!</Text>
+                  </Animated.View>
+                )}
+
+                <Pressable 
+                  style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                  onPress={handleUpdateProfile}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#021a19" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Changes</Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </Animated.View>
       </View>
     </Modal>
@@ -351,37 +267,6 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 20,
-  },
-  avatarButton: {
-    alignSelf: 'center',
-    marginBottom: 8,
-  },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#0d3d56',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  uploadButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#14b8a6',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#115e59',
   },
   rowInputs: {
     flexDirection: 'row',

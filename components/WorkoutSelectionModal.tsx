@@ -27,11 +27,14 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
-  const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>([]);
+  const [selectedWorkouts, setSelectedWorkouts] = useState<Array<{ id: string; order: number }>>([]);
   const [loading, setLoading] = useState(false);
 
+  // Use the more comprehensive list from ExerciseModal
   const muscleGroups = [
-    'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
+    'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
+    'glutes', 'hamstrings', 'lats', 'lower_back', 'quads', 'shoulders', 
+    'triceps', 'upper_back', 'upper_traps'
   ];
 
   useEffect(() => {
@@ -82,36 +85,71 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
           .select('*', { count: 'exact', head: true })
           .eq('template_id', template.id);
 
-        // Get template exercise IDs
-        const { data: exerciseIds } = await supabase
+        // Get template exercise IDs and their linked exercise_id
+        const { data: templateExercisesData, error: templateExercisesError } = await supabase
           .from('template_exercises')
-          .select('id')
+          .select('id, exercise_id') // Select exercise_id too
           .eq('template_id', template.id);
+
+        if (templateExercisesError) {
+           console.error(`Error fetching template exercises for ${template.id}:`, templateExercisesError);
+           // Return a default structure on error to avoid crashing the map
+           return {
+              id: template.id,
+              name: template.name,
+              description: template.description,
+              muscles: [],
+              estimated_duration: template.estimated_duration || '0 min',
+              exercise_count: 0,
+              set_count: 0
+           };
+        }
         
+        const exerciseIds = templateExercisesData?.map(ex => ex.exercise_id) || [];
+        const templateExerciseIds = templateExercisesData?.map(ex => ex.id) || [];
+
         // Get set count
         let setCount = 0;
-        if (exerciseIds && exerciseIds.length > 0) {
-          const ids = exerciseIds.map(ex => ex.id);
+        if (templateExerciseIds.length > 0) {
           const { count: setsCount } = await supabase
             .from('template_exercise_sets')
             .select('*', { count: 'exact', head: true })
-            .in('template_exercise_id', ids);
+            .in('template_exercise_id', templateExerciseIds);
           
           setCount = setsCount || 0;
+        }
+
+        // Fetch primary muscles based on linked exercises
+        let primaryMuscles: string[] = [];
+        if (exerciseIds.length > 0) {
+          const { data: exercisesData, error: exercisesError } = await supabase
+            .from('exercises')
+            .select('muscle_primary')
+            .in('id', exerciseIds);
+
+          if (exercisesError) {
+            console.error(`Error fetching primary muscles for exercises ${exerciseIds}:`, exercisesError);
+          } else if (exercisesData) {
+            // Flatten the array of arrays and get unique muscle names
+            const allMuscles = exercisesData.flatMap(ex => ex.muscle_primary || []);
+            primaryMuscles = [...new Set(allMuscles)];
+          }
         }
 
         return {
           id: template.id,
           name: template.name,
           description: template.description,
-          muscles: template.muscles || [],
+          muscles: primaryMuscles, // Use the fetched primary muscles
           estimated_duration: template.estimated_duration || '0 min',
           exercise_count: exerciseCount || 0,
           set_count: setCount
         };
       }));
       
-      setWorkouts(workoutsWithStats);
+      // Filter out any potential nulls if error handling returned null (though it now returns defaults)
+      const validWorkouts = workoutsWithStats.filter(w => w !== null) as Workout[];
+      setWorkouts(validWorkouts);
     } catch (error) {
       console.error('Error fetching workouts:', error);
     } finally {
@@ -146,17 +184,31 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
   };
 
   const toggleWorkoutSelection = (workoutId: string) => {
-    setSelectedWorkouts(prev => 
-      prev.includes(workoutId)
-        ? prev.filter(id => id !== workoutId)
-        : [...prev, workoutId]
-    );
+    setSelectedWorkouts(prev => {
+      const existingIndex = prev.findIndex(item => item.id === workoutId);
+      if (existingIndex !== -1) {
+        // Deselect: remove the item
+        return prev.filter(item => item.id !== workoutId);
+      } else {
+        // Select: add with the current count as order
+        return [...prev, { id: workoutId, order: prev.length }];
+      }
+    });
   };
 
   const handleConfirm = () => {
-    const selectedItems = workouts.filter(workout => 
-      selectedWorkouts.includes(workout.id)
-    );
+    // Sort selected workouts by their selection order
+    const sortedSelected = [...selectedWorkouts].sort((a, b) => a.order - b.order);
+    
+    // Map sorted IDs to the actual workout objects
+    const selectedItems: Workout[] = [];
+    sortedSelected.forEach(({ id }) => {
+      const workout = workouts.find(w => w.id === id);
+      if (workout) {
+        selectedItems.push(workout);
+      }
+    });
+    
     onSelect(selectedItems);
     onClose();
   };
@@ -209,12 +261,24 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
                   ]}
                   onPress={() => handleMuscleSelect(muscle)}
                 >
-                  <Text style={[
-                    styles.muscleGroupText,
-                    selectedMuscle === muscle && styles.selectedMuscleGroupText
-                  ]}>
-                    {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
-                  </Text>
+                  {(() => {
+                    // Format display text: capitalize first letter, replace underscores
+                    let displayText = muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ') : '';
+                    // Specific overrides if needed (though the above should handle these cases)
+                    if (muscle === 'upper_back') {
+                      displayText = 'Upper back';
+                    } else if (muscle === 'upper_traps') {
+                      displayText = 'Upper traps';
+                    }
+                    return (
+                      <Text style={[
+                        styles.muscleGroupText,
+                        selectedMuscle === muscle && styles.selectedMuscleGroupText
+                      ]}>
+                        {displayText}
+                      </Text>
+                    );
+                  })()}
                 </Pressable>
               ))}
             </ScrollView>
@@ -229,7 +293,11 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
                 <Text style={styles.statusText}>No workouts found</Text>
               ) : (
                 filteredWorkouts.map((workout) => {
-                  const isSelected = selectedWorkouts.includes(workout.id);
+                  // Check if the workout ID exists in the selectedWorkouts array of objects
+                  const selectionInfo = selectedWorkouts.find(item => item.id === workout.id);
+                  const isSelected = !!selectionInfo;
+                  const selectionOrder = selectionInfo ? selectionInfo.order + 1 : undefined;
+
                   return (
                     <Pressable
                       key={workout.id}

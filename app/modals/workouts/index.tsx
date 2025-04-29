@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Platform, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Platform, RefreshControl, ViewStyle, TextStyle, ImageStyle, StyleProp } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Search, ArrowLeft, X, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useEffect, useCallback } from 'react';
@@ -21,9 +21,12 @@ export default function WorkoutsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const { workouts, loading, error, fetchWorkouts, needsRefresh } = useWorkoutStore();
+  const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
 
   const muscleGroups = [
-    'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
+    'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
+    'glutes', 'hamstrings', 'lats', 'lower_back', 'quads', 'shoulders', 
+    'triceps', 'upper_back', 'upper_traps'
   ];
 
   useEffect(() => {
@@ -35,6 +38,24 @@ export default function WorkoutsScreen() {
       fetchWorkouts();
     }
   }, [needsRefresh]);
+
+  useEffect(() => {
+    let tempFiltered = [...workouts];
+
+    if (searchQuery) {
+      tempFiltered = tempFiltered.filter(workout =>
+        workout.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (selectedMuscles.length > 0) {
+      tempFiltered = tempFiltered.filter(workout => 
+        selectedMuscles.some(muscle => workout.muscles?.includes(muscle))
+      );
+    }
+
+    setFilteredWorkouts(tempFiltered);
+  }, [workouts, searchQuery, selectedMuscles]);
 
   const toggleMuscleFilter = (muscle: string) => {
     setSelectedMuscles(prev => 
@@ -91,7 +112,15 @@ export default function WorkoutsScreen() {
                 styles.muscleGroupText,
                 selectedMuscles.includes(muscle) && styles.selectedMuscleGroupText
               ]}>
-                {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
+                {(() => {
+                  let displayText = muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ') : '';
+                  if (muscle === 'upper_back') {
+                    displayText = 'Upper back';
+                  } else if (muscle === 'upper_traps') {
+                    displayText = 'Upper traps';
+                  }
+                  return displayText;
+                })()}
               </Text>
             </Pressable>
           ))}
@@ -106,15 +135,15 @@ export default function WorkoutsScreen() {
           <Text style={styles.statusText}>Loading workouts...</Text>
         ) : error ? (
           <Text style={styles.errorText}>{error}</Text>
-        ) : workouts.length === 0 ? (
+        ) : filteredWorkouts.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateTitle}>No workouts found</Text>
             <Text style={styles.emptyStateText}>
-              Create your first workout template to get started
+              {searchQuery || selectedMuscles.length > 0 ? 'Adjust your filters or create a matching workout' : 'Create your first workout template to get started'}
             </Text>
           </View>
         ) : (
-          workouts.map((workout) => (
+          filteredWorkouts.map((workout) => (
             <Pressable 
               key={workout.id} 
               style={styles.workoutCard}
@@ -133,7 +162,7 @@ export default function WorkoutsScreen() {
                       workout.muscles.slice(0, 3).map((muscle, index) => (
                         <View key={muscle || 'unknown'} style={styles.muscleChip}>
                           <Text style={styles.muscleChipText}>
-                            {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
+                            {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : 'Unknown'}
                           </Text>
                         </View>
                       ))
@@ -177,7 +206,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#021a19',
-  },
+  } as ViewStyle,
   header: {
     paddingTop: Platform.OS === 'web' ? 40 : 60,
     paddingHorizontal: 24,
@@ -185,30 +214,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',
     zIndex: 10,
-  },
+  } as ViewStyle,
   headerTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 24,
-  },
+  } as ViewStyle,
   backButton: {
     marginRight: 16,
     marginTop: 4,
-  },
+  } as ViewStyle,
   titleContainer: {
     flex: 1,
-  },
+  } as ViewStyle,
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#ccfbf1',
     marginBottom: 8,
-  },
+  } as TextStyle,
   subtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
-  },
+  } as TextStyle,
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,7 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
-  },
+  } as ViewStyle,
   searchInput: {
     flex: 1,
     color: '#ccfbf1',
@@ -224,124 +253,125 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     padding: 0,
-  },
+  } as TextStyle,
   searchInputWeb: {
     outlineStyle: 'none',
-  },
+  } as TextStyle,
   muscleGroupsScroll: {
     maxHeight: 40,
-  },
+    marginBottom: 16,
+  } as ViewStyle,
   muscleGroupsContent: {
     paddingHorizontal: 16,
     gap: 8,
-  },
+  } as ViewStyle,
   muscleGroupButton: {
     backgroundColor: '#115e59',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-  },
+  } as ViewStyle,
   selectedMuscleGroup: {
     backgroundColor: '#14b8a6',
-  },
+  } as ViewStyle,
   muscleGroupText: {
     color: '#5eead4',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-  },
+  } as TextStyle,
   selectedMuscleGroupText: {
     color: '#042f2e',
-  },
+  } as TextStyle,
   workoutsList: {
     flex: 1,
-  },
+  } as ViewStyle,
   workoutsListContent: {
     padding: 16,
     paddingBottom: Platform.OS === 'ios' ? 140 : 120,
-  },
+  } as ViewStyle,
   workoutCard: {
     backgroundColor: '#115e59',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-  },
+  } as ViewStyle,
   workoutContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
+  } as ViewStyle,
   workoutInfo: {
     flex: 1,
     marginRight: 16,
-  },
+  } as ViewStyle,
   workoutName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
     marginBottom: 4,
-  },
+  } as TextStyle,
   workoutDetails: {
     flexDirection: 'row',
     gap: 16,
     marginBottom: 8,
-  },
+  } as ViewStyle,
   workoutStats: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
-  },
+  } as TextStyle,
   muscleChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
+  } as ViewStyle,
   muscleChip: {
     backgroundColor: '#0d3d56',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-  },
+  } as ViewStyle,
   moreChip: {
     backgroundColor: '#134e4a',
-  },
+  } as ViewStyle,
   muscleChipText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#5eead4',
-  },
+  } as TextStyle,
   chevronContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
-  },
+  } as ViewStyle,
   emptyState: {
     alignItems: 'center',
     padding: 24,
-  },
+  } as ViewStyle,
   emptyStateTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
     marginBottom: 8,
-  },
+  } as TextStyle,
   emptyStateText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
     textAlign: 'center',
-  },
+  } as TextStyle,
   statusText: {
     color: '#5eead4',
     textAlign: 'center',
     marginTop: 24,
     fontFamily: 'Inter-Regular',
-  },
+  } as TextStyle,
   errorText: {
     color: '#ef4444',
     textAlign: 'center',
     marginTop: 24,
     fontFamily: 'Inter-Regular',
-  },
+  } as TextStyle,
   bottomButtonContainer: {
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     bottom: 24,
@@ -349,7 +379,7 @@ const styles = StyleSheet.create({
     right: 24,
     backgroundColor: 'transparent',
     zIndex: 100,
-  },
+  } as ViewStyle,
   newWorkoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -371,10 +401,10 @@ const styles = StyleSheet.create({
         elevation: 8,
       },
     }),
-  },
+  } as ViewStyle,
   newWorkoutButtonText: {
     color: '#021a19',
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-  },
+  } as TextStyle,
 });

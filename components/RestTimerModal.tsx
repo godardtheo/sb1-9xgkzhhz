@@ -30,12 +30,12 @@ export default function RestTimerModal({
 }: Props) {
   // Common rest times in seconds
   const restTimeOptions = [
-    { label: '30s', value: 30 },
-    { label: '1m', value: 60 },
-    { label: '1.5m', value: 90 },
-    { label: '2m', value: 120 },
-    { label: '3m', value: 180 },
-    { label: '5m', value: 300 },
+    { label: '0:30', value: 30 },
+    { label: '1:00', value: 60 },
+    { label: '1:30', value: 90 },
+    { label: '2:00', value: 120 },
+    { label: '3:00', value: 180 },
+    { label: '5:00', value: 300 },
   ];
 
   const translateY = useSharedValue(300);
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   timeOption: {
     width: '30%',
-    aspectRatio: 2, // Changed from 1 to 2 to make buttons shorter and wider
+    height: 50,
     backgroundColor: '#0d3d56',
     borderRadius: 16,
     justifyContent: 'center',
@@ -190,11 +190,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#14b8a6',
   },
   timeText: {
-    fontSize: 16, // Slightly smaller text
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#5eead4',
+    textAlign: 'center',
   },
   selectedTimeText: {
+    fontFamily: 'Inter-SemiBold',
     color: '#021a19',
+    textAlign: 'center',
   },
 });

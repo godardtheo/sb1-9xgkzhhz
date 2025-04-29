@@ -200,6 +200,8 @@ const BodyWeightModal: React.FC<BodyWeightModalProps> = ({
               weight: weightValue,
               deadline: customDate ? customDate.toISOString() : null,
               updated_at: new Date().toISOString()
+            }, { 
+              onConflict: 'user_id' 
             });
 
           if (goalError) {

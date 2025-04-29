@@ -11,15 +11,26 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
+import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
+import { Workout as ModalWorkout } from '@/components/WorkoutSelectionModal';
 
+// Define the structure for muscle counts
+type MuscleCount = {
+  muscle: string;
+  setCount: number;
+}
+
+// Use the imported ModalWorkout type directly if SelectedWorkout becomes identical
+// Update: Let's define SelectedWorkout explicitly to include musclesWithCounts
 type SelectedWorkout = {
-  id: string;
+  id: string; // template_id
   name: string;
   description: string | null;
-  muscles: string[];
+  muscles: string[]; // Basic list
+  musclesWithCounts: MuscleCount[]; // Sorted list with counts
   estimated_duration: string;
-  exercise_count: number;
-  set_count?: number;
+  exercise_count?: number; 
+  set_count?: number; 
 };
 
 export default function NewProgramScreen() {
@@ -51,7 +62,7 @@ export default function NewProgramScreen() {
     updateItemHeight,
     handleDragActive,
     handleDragEnd,
-  } = useWorkoutReorder(selectedWorkouts);
+  } = useWorkoutReorder(selectedWorkouts as any);
 
   // Keep selectedWorkouts and reorderedWorkouts in sync
   useEffect(() => {
@@ -84,7 +95,7 @@ export default function NewProgramScreen() {
   };
 
   const totalWorkouts = selectedWorkouts.length;
-  const totalSets = selectedWorkouts.reduce((acc, workout) => acc + (workout.exercise_count * 4), 0);
+  const totalSets = selectedWorkouts.reduce((acc, workout) => acc + (workout.exercise_count || 0 * 4), 0);
   const totalMinutes = selectedWorkouts.reduce((acc, workout) => {
     return acc + parseDurationToMinutes(workout.estimated_duration);
   }, 0);
@@ -147,7 +158,7 @@ export default function NewProgramScreen() {
       }
 
       // Add workouts to program using the reordered list to preserve order
-      const workoutsToAdd = reorderedWorkouts.map((workout, index) => ({
+      const workoutsToAdd = reorderedWorkouts.map((workout: SelectedWorkout, index: number) => ({
         program_id: program.id,
         template_id: workout.id,
         name: workout.name,
@@ -193,9 +204,98 @@ export default function NewProgramScreen() {
     setSelectedWorkouts(prev => prev.filter(w => w.id !== workoutId));
   };
 
-  const handleWorkoutSelection = (workouts: SelectedWorkout[]) => {
-    setSelectedWorkouts(prev => [...prev, ...workouts]);
+  const handleWorkoutSelection = async (selectedTemplates: ModalWorkout[]) => {
     setShowWorkoutSelection(false);
+    setLoading(true);
+    try {
+      const detailedWorkouts = await Promise.all(selectedTemplates.map(async (template): Promise<SelectedWorkout | null> => {
+        // Fetch details: exercises, sets, muscles
+        const { data: templateExercises, error: templateExercisesError } = await supabase
+          .from('template_exercises')
+          .select('id, exercise_id')
+          .eq('template_id', template.id);
+
+        if (templateExercisesError) {
+          console.error('Error fetching template exercises:', templateExercisesError);
+          return null;
+        }
+        if (!templateExercises || templateExercises.length === 0) {
+          // Return a basic structure if no exercises found
+          return {
+            id: template.id,
+            name: template.name,
+            description: template.description,
+            muscles: [],
+            musclesWithCounts: [],
+            estimated_duration: template.estimated_duration || '0 min',
+            exercise_count: 0,
+            set_count: 0,
+          };
+        }
+
+        const exerciseCount = templateExercises.length;
+        const exerciseIds = templateExercises.map(ex => ex.exercise_id);
+        const templateExerciseIds = templateExercises.map(ex => ex.id);
+
+        const { data: exercisesData, error: exercisesError } = await supabase
+          .from('exercises')
+          .select('id, muscle_primary')
+          .in('id', exerciseIds);
+
+        if (exercisesError) {
+          console.error('Error fetching exercises data:', exercisesError);
+          return null;
+        }
+        const exerciseMuscleMap = new Map(exercisesData?.map(ex => [ex.id, ex.muscle_primary || []]));
+
+        const { data: setsData, error: setsError } = await supabase
+          .from('template_exercise_sets')
+          .select('template_exercise_id, id')
+          .in('template_exercise_id', templateExerciseIds);
+
+        if (setsError) {
+          console.error('Error fetching sets data:', setsError);
+          return null;
+        }
+        let totalSetCount = 0;
+        const muscleSetCounts: { [key: string]: number } = {};
+
+        for (const te of templateExercises) {
+          const setsForThisExercise = setsData?.filter(s => s.template_exercise_id === te.id).length || 0;
+          totalSetCount += setsForThisExercise;
+          const primaryMuscles = exerciseMuscleMap.get(te.exercise_id) || [];
+          for (const muscle of primaryMuscles) {
+            muscleSetCounts[muscle] = (muscleSetCounts[muscle] || 0) + setsForThisExercise;
+          }
+        }
+
+        const sortedMuscles: MuscleCount[] = Object.entries(muscleSetCounts)
+          .map(([muscle, setCount]) => ({ muscle, setCount }))
+          .sort((a, b) => b.setCount - a.setCount);
+
+        // Return the fully detailed workout info matching SelectedWorkout type
+        return {
+          id: template.id, // template_id
+          name: template.name,
+          description: template.description,
+          muscles: Object.keys(muscleSetCounts), // Basic list
+          musclesWithCounts: sortedMuscles, // Sorted list with counts
+          estimated_duration: template.estimated_duration || '0 min',
+          exercise_count: exerciseCount,
+          set_count: totalSetCount, 
+        };
+      }));
+
+      // Filter out nulls and use the fully detailed workouts
+      const validDetailedWorkouts = detailedWorkouts.filter(w => w !== null) as SelectedWorkout[];
+      setSelectedWorkouts(prev => [...prev, ...validDetailedWorkouts]);
+
+    } catch (err: any) {
+      console.error('Error processing selected workouts:', err);
+      setError('Failed to add selected workouts. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleWorkoutInfo = (workout: SelectedWorkout) => {
@@ -203,7 +303,7 @@ export default function NewProgramScreen() {
     // as navigating to another modal while in a modal is the issue
     Alert.alert(
       workout.name,
-      `${workout.description || 'No description'}\n\nExercises: ${workout.exercise_count}\nEstimated duration: ${workout.estimated_duration}`
+      `${workout.description || 'No description'}\n\nExercises: ${workout.exercise_count || 0}\nEstimated duration: ${workout.estimated_duration}`
     );
   };
 
@@ -346,7 +446,7 @@ export default function NewProgramScreen() {
                   onRemove={removeWorkout}
                   onPress={() => router.push(`/modals/workouts/${workout.id}`)}
                   onInfo={() => handleWorkoutInfo(workout)}
-                  onLayout={event => updateItemHeight(index, event.nativeEvent.layout.height)}
+                  onLayout={(event: LayoutChangeEvent) => updateItemHeight(index, event.nativeEvent.layout.height)}
                 />
               ))}
               <Pressable 
@@ -499,23 +599,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 4,
     flex: 1,
     paddingHorizontal: 4,
   },
   switch: {
     transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }],
+    marginBottom: 0,
   },
   toggleText: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
-    opacity: 0.3,
+    opacity: 1,
   },
   toggleTextActive: {
-    opacity: 1,
   },
   statItem: {
     flex: 1,

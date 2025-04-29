@@ -11,11 +11,20 @@ import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
 
+// Type for data coming FROM ExerciseModal
+type ModalExerciseSelection = {
+  id: string;
+  name: string;
+  // Include other properties known to be returned by ExerciseModal if necessary
+  // For now, assume ID and name are sufficient to proceed
+};
+
 type Exercise = {
   id: string;
   name: string;
-  muscle_primary: string[];
+  muscle_primary?: string[]; // Made optional to match DraggableExerciseCard
   muscle_secondary?: string[];
+  muscle?: string; // Added optional old field for ExerciseDetailsModal compatibility
   equipment: string[];
   instructions?: string;
   video_url?: string;
@@ -305,7 +314,7 @@ export default function EditWorkoutScreen() {
     router.push(`/modals/exercise-details/${exercise.id}`);
   };
 
-  const handleAddExercise = async (selectedExercises: Exercise[]) => {
+  const handleAddExercise = async (selectedExercises: ModalExerciseSelection[]) => {
     try {
       setLoading(true);
 
@@ -314,16 +323,21 @@ export default function EditWorkoutScreen() {
       if (userError) throw new Error('Authentication error');
       if (!user) throw new Error('Not authenticated');
 
-      for (const exercise of selectedExercises) {
-        const existingIndex = exercises.findIndex(e => e.id === exercise.id);
+      for (const selectedExercise of selectedExercises) {
+        // Check if already exists using the ID from the selection
+        const existingIndex = exercises.findIndex(e => e.id === selectedExercise.id);
         if (existingIndex !== -1) continue; // Skip if already added
+
+        // Fetch full exercise details if needed, or assume we have enough
+        // For now, we proceed assuming the ID is enough to link in template_exercises
+        // We will refetch the entire list anyway after adding
 
         // 1. Add exercise to template_exercises
         const { data: templateExercise, error: addError } = await supabase
           .from('template_exercises')
           .insert({
             template_id: id,
-            exercise_id: exercise.id,
+            exercise_id: selectedExercise.id, // Use ID from selection
             sets: 4, // Default number of sets
             rest_time: '00:02:00',
             order: exercises.length // Add at the end
@@ -393,34 +407,43 @@ export default function EditWorkoutScreen() {
     }
   };
 
-  const handleUpdateReps = (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => {
+  // Nouvelle fonction pour gérer la mise à jour de la valeur pendant la frappe
+  const handleRepInputChange = (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => {
     setExercises(prev => prev.map(ex => {
       if (ex.id === exerciseId) {
         return {
           ...ex,
           sets: ex.sets.map(set => {
             if (set.id === setId) {
-              if (type === 'min') {
-                const maxReps = parseInt(set.maxReps) || 12;
-                const minReps = parseInt(value) || 0;
-                return {
-                  ...set,
-                  minReps: value,
-                  maxReps: maxReps < minReps ? value : set.maxReps
-                };
-              } else {
-                const minReps = parseInt(set.minReps) || 6;
-                const maxReps = parseInt(value) || 0;
-                return {
-                  ...set,
-                  maxReps: value,
-                  minReps: maxReps < minReps ? value : set.minReps
-                };
-              }
+              return { ...set, [type === 'min' ? 'minReps' : 'maxReps']: value };
             }
             return set;
           })
         };
+      }
+      return ex;
+    }));
+  };
+
+  // Nouvelle fonction pour valider et corriger les reps au blur
+  const validateAndCorrectReps = (exerciseId: string, setId: string) => {
+    setExercises(prev => prev.map(ex => {
+      if (ex.id === exerciseId) {
+        const updatedSets = ex.sets.map(set => {
+          if (set.id === setId) {
+            // Assurer que les valeurs sont des nombres ou 0 si vide/invalide
+            const minReps = parseInt(set.minReps) || 0;
+            const maxReps = parseInt(set.maxReps) || 0;
+
+            // Valider seulement si les deux champs ont une valeur valide et min > max
+            if (set.minReps !== '' && set.maxReps !== '' && minReps > maxReps) {
+              // Corriger minReps pour qu'il soit égal à maxReps
+              return { ...set, minReps: maxReps.toString() };
+            }
+          }
+          return set;
+        });
+        return { ...ex, sets: updatedSets };
       }
       return ex;
     }));
@@ -547,7 +570,8 @@ export default function EditWorkoutScreen() {
                 onMoveDown={handleMoveDown}
                 onRemove={removeExercise}
                 onInfo={handleExerciseInfo}
-                onUpdateReps={handleUpdateReps}
+                onRepInputChange={handleRepInputChange}
+                onRepInputBlur={validateAndCorrectReps}
                 onAddSet={handleAddSet}
                 onRemoveSet={handleRemoveSet}
                 scrollRef={scrollRef}
@@ -596,7 +620,7 @@ export default function EditWorkoutScreen() {
         <ExerciseDetailsModal
           visible={!!selectedExercise}
           onClose={() => setSelectedExercise(null)}
-          exercise={selectedExercise}
+          exercise={selectedExercise as any}
           isFavorite={false}
           onFavoriteToggle={() => {}}
         />

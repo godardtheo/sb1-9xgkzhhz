@@ -33,10 +33,7 @@ export default function BodyWeightPage() {
   const [weightData, setWeightData] = useState<WeightData[]>([]);
   const [weightGoal, setWeightGoal] = useState<number | null>(null);
   const [initialWeight, setInitialWeight] = useState<number | null>(null);
-  const [addModalVisible, setAddModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [newWeight, setNewWeight] = useState('');
-  const [newNotes, setNewNotes] = useState('');
   const [selectedEntry, setSelectedEntry] = useState<WeightData | null>(null);
   
   // Add state for the BodyWeightModal component
@@ -112,33 +109,6 @@ export default function BodyWeightPage() {
       setError(err instanceof Error ? err : new Error('An unknown error occurred'));
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Handle adding a new weight entry
-  const handleAddWeight = async () => {
-    const weightValue = parseFloat(newWeight);
-    if (isNaN(weightValue) || weightValue <= 0) {
-      alert('Please enter a valid weight');
-      return;
-    }
-    
-    const success = await logWeight(weightValue, newNotes);
-    if (success) {
-      setNewWeight('');
-      setNewNotes('');
-      setAddModalVisible(false);
-      fetchWeightData();
-      // Only use haptics on native platforms (iOS, Android)
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    } else {
-      alert('Failed to log weight. Please try again.');
-      // Only use haptics on native platforms (iOS, Android)
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
     }
   };
 
@@ -274,65 +244,6 @@ export default function BodyWeightPage() {
           onEntryPress={handlePointPress}
         />
       </ScrollView>
-      
-      {/* Legacy Add Weight Modal - Keep this until the new modal is fully implemented */}
-      <Modal
-        visible={addModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setAddModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Weight</Text>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Weight (kg)</Text>
-              <TextInput
-                style={styles.input}
-                value={newWeight}
-                onChangeText={setNewWeight}
-                placeholder="Enter weight in kg"
-                placeholderTextColor="#888888"
-                keyboardType="numeric"
-                autoFocus
-              />
-            </View>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Notes (optional)</Text>
-              <TextInput
-                style={[styles.input, styles.notesInput]}
-                value={newNotes}
-                onChangeText={setNewNotes}
-                placeholder="Add notes about this entry"
-                placeholderTextColor="#888888"
-                multiline
-              />
-            </View>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setAddModalVisible(false);
-                  setNewWeight('');
-                  setNewNotes('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleAddWeight}
-              >
-                <Text style={styles.saveButtonText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
       
       {/* Entry Details Modal */}
       <Modal

@@ -11,6 +11,11 @@ import {
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useAuthStore } from '@/lib/auth/store';
 import { View, ActivityIndicator, Text, AppState, Platform } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+import { Audio } from 'expo-av';
+
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -98,6 +103,34 @@ export default function RootLayout() {
       window.frameworkReady();
     }
   }, []);
+
+  // Configure audio mode
+  useEffect(() => {
+    const configureAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true, // Allow playback in silent mode on iOS
+          allowsRecordingIOS: false,
+          staysActiveInBackground: false, 
+          interruptionModeIOS: 1, // Do not mix with other sounds
+          shouldDuckAndroid: true, // Duck other sounds on Android
+          interruptionModeAndroid: 1, // Do not mix with other sounds
+          playThroughEarpieceAndroid: false,
+        });
+        console.log('Audio mode configured successfully (playsInSilentModeIOS: true).');
+      } catch (error) {
+        console.error('Failed to set audio mode:', error);
+      }
+    };
+
+    configureAudio();
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
 
   // Show loading screen while fonts are loading or auth is initializing
   if (!fontsLoaded || !initialized) {

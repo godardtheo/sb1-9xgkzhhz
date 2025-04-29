@@ -65,10 +65,10 @@ export default function SettingsScreen() {
         {/* Profile Section */}
         <View style={styles.profileSection}>
           <View style={styles.profileHeader}>
-            <Image
+            {/* <Image
               source={{ uri: userProfile?.avatar_url || defaultAvatarUrl }}
               style={styles.avatar}
-            />
+            /> */}
             <View style={styles.profileInfo}>
               <Text style={styles.username}>{userProfile?.full_name || 'Loading...'}</Text>
               <Text style={styles.email}>{userProfile?.email || 'Loading...'}</Text>

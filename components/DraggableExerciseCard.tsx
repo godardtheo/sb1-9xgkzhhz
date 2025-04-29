@@ -15,7 +15,7 @@ type Exercise = {
   muscle?: string;  // Format ancien
   muscle_primary?: string[];  // Format nouveau
   muscle_secondary?: string[];
-  equipment?: string | string[];
+  equipment?: string[]; // Ajusté pour correspondre à [id].tsx : optionnel, tableau de strings
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -37,7 +37,8 @@ type Props = {
   totalExercises: number;
   onAddSet?: (exerciseId: string) => void;
   onRemoveSet?: (exerciseId: string) => void;
-  onUpdateReps?: (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => void;
+  onRepInputChange?: (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => void;
+  onRepInputBlur?: (exerciseId: string, setId: string) => void;
   scrollRef?: React.RefObject<ScrollView>;
 };
 
@@ -63,7 +64,8 @@ const DraggableExerciseCard = forwardRef<
   totalExercises,
   onAddSet,
   onRemoveSet,
-  onUpdateReps,
+  onRepInputChange,
+  onRepInputBlur,
   scrollRef,
 }, ref) => {
   // Animation values
@@ -115,15 +117,6 @@ const DraggableExerciseCard = forwardRef<
       ),
     };
   });
-  
-  // Handle input changes for set reps
-  const handleUpdateReps = (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => {
-    // Filter non-numeric input
-    const numericValue = value.replace(/[^0-9]/g, '');
-    if (numericValue === '' || parseInt(numericValue) > 0) {
-      onUpdateReps?.(exerciseId, setId, type, numericValue);
-    }
-  };
   
   // Helper function for formatting muscle names
   const capitalizeFirstLetter = (string: string | undefined | null) => {
@@ -200,7 +193,8 @@ const DraggableExerciseCard = forwardRef<
                   key={`${set.id}-min`}
                   style={styles.setInput}
                   value={set.minReps}
-                  onChangeText={(value) => handleUpdateReps(exercise.id, set.id, 'min', value)}
+                  onChangeText={(value) => onRepInputChange?.(exercise.id, set.id, 'min', value.replace(/[^0-9]/g, ''))}
+                  onBlur={() => onRepInputBlur?.(exercise.id, set.id)}
                   keyboardType="numeric"
                   placeholder="6"
                   placeholderTextColor="#5eead4"
@@ -212,7 +206,8 @@ const DraggableExerciseCard = forwardRef<
                   key={`${set.id}-max`}
                   style={styles.setInput}
                   value={set.maxReps}
-                  onChangeText={(value) => handleUpdateReps(exercise.id, set.id, 'max', value)}
+                  onChangeText={(value) => onRepInputChange?.(exercise.id, set.id, 'max', value.replace(/[^0-9]/g, ''))}
+                  onBlur={() => onRepInputBlur?.(exercise.id, set.id)}
                   keyboardType="numeric"
                   placeholder="12"
                   placeholderTextColor="#5eead4"
@@ -288,7 +283,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         // Fix for cursor type error
-        // @ts-ignore
+        // @ts-ignore 
         cursor: 'default',
         // @ts-ignore
         userSelect: 'none',
