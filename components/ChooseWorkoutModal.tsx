@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, Modal, Pressable, Platform, FlatList, ActivityIndicator, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Platform, FlatList, ActivityIndicator, TextInput, ScrollView, ViewStyle, TextStyle, ImageStyle } from 'react-native';
 import { X, ChevronRight, Dumbbell, PlusCircle, Play, Search, ArrowLeft } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, SlideInUp, SlideOutDown } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { getNextWorkout } from '@/lib/workoutUtils';
 import { supabase } from '@/lib/supabase';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
@@ -352,7 +352,7 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
         <Pressable style={styles.backdrop} onPress={onClose} />
         <Animated.View 
           style={styles.modalContainer}
-          entering={SlideInUp.springify().damping(15)}
+          entering={SlideInDown.springify().damping(15)}
           exiting={SlideOutDown.springify().damping(15)}
         >
           <View style={styles.modalContent}>
@@ -364,7 +364,7 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<{[key: string]: ViewStyle | TextStyle | ImageStyle}>({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   searchInputWeb: {
-    outlineStyle: 'none',
+    outlineWidth: 0,
   },
   muscleGroupsScroll: {
     maxHeight: 40,

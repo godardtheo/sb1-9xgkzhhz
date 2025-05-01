@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#021a19',
   } as ViewStyle,
   header: {
-    paddingTop: Platform.OS === 'web' ? 40 : 60,
+    paddingTop: 24,
     paddingHorizontal: 24,
     backgroundColor: '#021a19',
     borderBottomWidth: 1,

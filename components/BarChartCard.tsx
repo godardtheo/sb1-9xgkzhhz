@@ -26,6 +26,7 @@ interface BarChartCardProps extends Omit<ChartCardProps, 'children'> {
   yAxisLabelXOffset?: number;
   segments?: number;
   tooltipValueSuffix?: string;
+  yAxisTicks?: number[];
 }
 
 // Fix Y_AXIS_WIDTH reference by moving it outside of the component
@@ -49,7 +50,8 @@ export default function BarChartCard({
   formatYLabel = (yValue) => yValue,
   yAxisLabelXOffset,
   segments = 4,
-  tooltipValueSuffix
+  tooltipValueSuffix,
+  yAxisTicks: customYAxisTicks
 }: BarChartCardProps) {
   const { width } = useWindowDimensions();
   const chartWidth = width - 80; // Preserve the existing width setting
@@ -131,6 +133,14 @@ export default function BarChartCard({
   
   // 3. Generate Clean, Even Intervals: Create visually appealing tick marks
   const { yTicks, adjustedMax } = useMemo(() => {
+    // If custom ticks are provided, use them directly
+    if (customYAxisTicks && customYAxisTicks.length > 0) {
+      const sortedTicks = [...customYAxisTicks].sort((a, b) => a - b);
+      const maxTick = sortedTicks[sortedTicks.length - 1] || 1; // Use last tick as max, default to 1
+      return { yTicks: sortedTicks, adjustedMax: maxTick };
+    }
+
+    // --- Fallback to existing automatic calculation if custom ticks are not provided ---
     // Calculate interval and ensure it's a clean number
     let interval = maxValue / segmentCount;
     
@@ -151,7 +161,7 @@ export default function BarChartCard({
     );
     
     return { yTicks: ticks, adjustedMax };
-  }, [maxValue, segmentCount]);
+  }, [maxValue, segmentCount, customYAxisTicks]);
   
   // Initialize bar layouts array
   useEffect(() => {
@@ -295,7 +305,7 @@ export default function BarChartCard({
                   style={[
                     styles.yAxisLabel,
                     { 
-                      bottom: (tick / adjustedMax) * chartHeight + 28,
+                      bottom: adjustedMax > 0 ? (tick / adjustedMax) * chartHeight + 28 : 28,
                       height: 20,
                       lineHeight: 20
                     }
@@ -316,7 +326,7 @@ export default function BarChartCard({
                   style={[
                     styles.gridLine,
                     { 
-                      bottom: (tick / adjustedMax) * chartHeight
+                      bottom: adjustedMax > 0 ? (tick / adjustedMax) * chartHeight : 0
                     }
                   ]}
                 />
@@ -352,7 +362,7 @@ export default function BarChartCard({
                     }
                     
                     // Calculate height using adjustedMax instead of maxValue
-                    const barHeightPercent = item.value / adjustedMax;
+                    const barHeightPercent = adjustedMax > 0 ? item.value / adjustedMax : 0;
                     const barHeight = barHeightPercent * chartHeight;
                     const isSelected = selectedBarIndex === index;
                     
@@ -436,7 +446,7 @@ export default function BarChartCard({
               position: 'absolute',
               // Add Y_AXIS_WIDTH to account for the Y-axis space
               left: Y_AXIS_WIDTH + (barLayouts[selectedBarIndex]?.x || 0) + (idealBarWidth / 2) - (tooltipWidth / 2),
-              top: chartContainerHeight - (((formattedData[selectedBarIndex]?.value || 0) / adjustedMax) * chartHeight) - 52,
+              top: chartContainerHeight - (adjustedMax > 0 ? (((formattedData[selectedBarIndex]?.value || 0) / adjustedMax) * chartHeight) : 0) - 52,
               minWidth: tooltipWidth, // Use measured or default width
             }
           ]}

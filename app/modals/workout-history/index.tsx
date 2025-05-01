@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, Platform } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar, DateData } from 'react-native-calendars';
 import { format, addMonths, subMonths, isSameMonth, isAfter } from 'date-fns';
@@ -27,7 +27,10 @@ export default function WorkoutHistoryModal() {
   
   // Load data when component mounts or month changes
   const loadData = useCallback(async () => {
-    setLoading(true);
+    // Only show full screen loading on initial load (when workouts array is empty)
+    if (workouts.length === 0) {
+      setLoading(true);
+    }
     try {
       // Load calendar data for current month
       const calendarData = await getMonthlyWorkoutCalendarData(currentMonth);
@@ -41,11 +44,14 @@ export default function WorkoutHistoryModal() {
     } finally {
       setLoading(false);
     }
-  }, [currentMonth]);
+  }, [currentMonth, workouts.length]);
   
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // Use useFocusEffect to load data when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData]) // Dependency array includes loadData (which depends on currentMonth)
+  );
   
   const handleBack = () => {
     router.back();
@@ -92,7 +98,7 @@ export default function WorkoutHistoryModal() {
         </Pressable>
         
         <Pressable onPress={handleMonthPress} style={styles.monthButton}>
-          <Text style={styles.monthText}>{formattedMonth}</Text>
+          <Text style={styles.monthText}>{formattedMonth || 'Loading Month...'}</Text>
           <Ionicons name="caret-down" size={16} color="#5eead4" style={{ marginLeft: 4 }} />
         </Pressable>
         
@@ -208,10 +214,12 @@ export default function WorkoutHistoryModal() {
           style={styles.content}
           contentContainerStyle={styles.contentContainer}
         >
-          {/* Calendar Section */}
+          {/* Restore Calendar Section View */}
           <View style={styles.calendarSection}>
+            {/* Keep header */}
             {renderCalendarHeader()}
             
+            {/* Restore Calendar component */}
             <Calendar
               theme={{
                 calendarBackground: 'transparent',
@@ -247,7 +255,8 @@ export default function WorkoutHistoryModal() {
             />
           </View>
           
-          {/* Recent Workouts Section */}
+          
+          {/* Restore Recent Workouts Section */}
           <View style={styles.workoutsSection}>
             <Text style={styles.sectionTitle}>Recent Workouts</Text>
             
@@ -269,10 +278,11 @@ export default function WorkoutHistoryModal() {
               </View>
             )}
           </View>
+          
         </ScrollView>
       )}
       
-      {/* Month selector modal */}
+      {/* Restore Month selector modal */}
       {renderMonthSelector()}
     </View>
   );
@@ -288,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: 24,
     paddingBottom: 16,
     backgroundColor: '#042f2e',
     borderBottomWidth: 1,

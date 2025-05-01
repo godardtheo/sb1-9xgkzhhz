@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
 interface ExerciseSet {
   weight: string;
@@ -15,29 +14,20 @@ interface NonDraggableDoneExerciseProps {
     name: string;
     sets: ExerciseSet[];
   };
+  exerciseId: string;
+  onPress: (exerciseId: string) => void;
 }
 
-export default function NonDraggableDoneExercise({ exercise }: NonDraggableDoneExerciseProps) {
-  const router = useRouter();
-  
-  const handleExerciseStatsPress = () => {
-    // This will be implemented when exercise stats screen exists
-    // router.push(`/modals/exercise-stats/${exercise.id}`);
-    console.log(`Navigate to stats for exercise: ${exercise.id}`);
-  };
-
+export default function NonDraggableDoneExercise({ exercise, exerciseId, onPress }: NonDraggableDoneExerciseProps) {
   return (
-    <View style={styles.container}>
+    <Pressable 
+      style={styles.container}
+      onPress={() => onPress(exerciseId)}
+    >
       {/* Exercise Header */}
       <View style={styles.header}>
         <Text style={styles.exerciseName}>{exercise.name}</Text>
-        <Pressable 
-          onPress={handleExerciseStatsPress}
-          style={styles.statsButton}
-          hitSlop={8}
-        >
-          <Ionicons name="chevron-forward" size={20} color="#5eead4" />
-        </Pressable>
+        <Ionicons name="chevron-forward" size={20} color="#5eead4" />
       </View>
       
       {/* Table Header */}
@@ -55,7 +45,7 @@ export default function NonDraggableDoneExercise({ exercise }: NonDraggableDoneE
           <Text style={styles.setText}>{set.reps}</Text>
         </View>
       ))}
-    </View>
+    </Pressable>
   );
 }
 
@@ -76,12 +66,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
-  },
-  statsButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   tableHeader: {
     flexDirection: 'row',

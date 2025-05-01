@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import NonDraggableDoneExercise from '@/components/NonDraggableDoneExercise';
@@ -66,7 +66,7 @@ export default function WorkoutDetailModal() {
         ? format(new Date(workout.date), 'MMMM d, yyyy') 
         : 'Unknown Date';
       
-      // Get exercises for this workout (without the relationship that's causing issues)
+      // Get exercises for this workout (ensure exercise_id is selected)
       const { data: workoutExercises, error: exercisesError } = await supabase
         .from('workout_exercises')
         .select('id, exercise_id, parent_workout_id')
@@ -135,6 +135,7 @@ export default function WorkoutDetailModal() {
           
           formattedExercises.push({
             id: workoutExercise.id,
+            exerciseId: workoutExercise.exercise_id,
             name: exerciseName,
             sets: formattedSets
           });
@@ -162,6 +163,15 @@ export default function WorkoutDetailModal() {
     router.back();
   };
   
+  const handleExercisePress = (exerciseId: string) => {
+    if (!exerciseId) {
+      console.warn('Attempted to navigate with undefined exerciseId');
+      return;
+    }
+    console.log(`Navigating to exercise details for ID: ${exerciseId}`);
+    router.push(`/modals/exercise-details/${exerciseId}`);
+  };
+  
   const handleDeletePress = useCallback(() => {
     console.log('Delete button pressed, showing confirmation modal...');
     setForceUpdateCounter(prev => prev + 1);
@@ -171,80 +181,109 @@ export default function WorkoutDetailModal() {
   }, []);
   
   const handleDeleteConfirm = async () => {
+    console.log('[DEL] Starting deletion process for workout ID:', id);
+    // Hide confirmation modal immediately and show loading overlay
+    setDeleteConfirmVisible(false);
+    setDeleteLoading(true);
+    setError(null); // Clear previous errors
+
     try {
-      setDeleteLoading(true);
-      
-      console.log(`Deleting workout: ${id}`);
-      
-      // First we need to get all workout exercise IDs to delete their sets
+      // Step 1: Fetch workout exercise IDs
+      console.log('[DEL] Step 1: Fetching workout_exercises IDs for workout:', id);
       const { data: workoutExercises, error: exercisesError } = await supabase
         .from('workout_exercises')
         .select('id')
         .eq('parent_workout_id', id);
       
       if (exercisesError) {
-        console.error('Error fetching workout exercises for deletion:', exercisesError);
-        return;
+        console.error('[DEL] Step 1 FAILED: Error fetching workout exercises:', JSON.stringify(exercisesError, null, 2));
+        // Show error and stop
+        setError(`Failed to fetch exercises: ${exercisesError.message}`);
+        Alert.alert('Deletion Error', `Failed to fetch associated exercises: ${exercisesError.message}`);
+        // No return here, finally block will handle loading state
+        throw exercisesError; // Throw error to be caught by outer catch
       }
       
-      // Extract exercise IDs
       const exerciseIds = workoutExercises?.map(ex => ex.id) || [];
-      console.log(`Found ${exerciseIds.length} workout exercises to delete`);
+      console.log(`[DEL] Step 1 SUCCESS: Found ${exerciseIds.length} workout_exercises. IDs: ${exerciseIds.join(', ')}`);
       
-      // Delete related workout sets first (if there are any exercises)
+      // Steps 2 & 3: Delete related sets and then workout_exercises
       if (exerciseIds.length > 0) {
+        // Step 2: Delete sets
+        console.log('[DEL] Step 2: Attempting to delete sets for workout_exercise IDs:', exerciseIds.join(', '));
         try {
-          // Delete all sets for these exercises using the 'sets' table
           const { error: setsDeleteError } = await supabase
-            .from('sets')  // Changed from 'workout_sets' to 'sets'
+            .from('sets')
             .delete()
             .in('workout_exercise_id', exerciseIds);
           
           if (setsDeleteError) {
-            console.error('Error deleting workout sets:', setsDeleteError);
-            return;
+            console.error('[DEL] Step 2 FAILED: Error deleting sets:', JSON.stringify(setsDeleteError, null, 2));
+            setError(`Failed to delete sets: ${setsDeleteError.message}`);
+            Alert.alert('Deletion Error', `Failed to delete associated sets: ${setsDeleteError.message}`);
+            throw setsDeleteError;
           }
           
-          console.log('Successfully deleted related workout sets');
-        } catch (deleteError) {
-          console.error('Error in deleting sets:', deleteError);
+          console.log('[DEL] Step 2 SUCCESS: Successfully deleted related sets.');
+        } catch (deleteSetsCatchError: any) {
+          console.error('[DEL] Step 2 FAILED (catch block): Error during set deletion:', JSON.stringify(deleteSetsCatchError, null, 2));
+          setError(`Error during set deletion: ${deleteSetsCatchError?.message || 'Unknown error'}`);
+          Alert.alert('Deletion Error', `An error occurred while deleting sets: ${deleteSetsCatchError?.message || 'Unknown error'}`);
+          // Rethrow or handle appropriately
+          throw deleteSetsCatchError;
         }
         
-        // Now delete the workout exercises
+        // Step 3: Delete workout_exercises
+        console.log('[DEL] Step 3: Attempting to delete workout_exercises for workout ID:', id);
         const { error: exercisesDeleteError } = await supabase
           .from('workout_exercises')
           .delete()
           .eq('parent_workout_id', id);
         
         if (exercisesDeleteError) {
-          console.error('Error deleting workout exercises:', exercisesDeleteError);
-          return;
+          console.error('[DEL] Step 3 FAILED: Error deleting workout_exercises:', JSON.stringify(exercisesDeleteError, null, 2));
+          setError(`Failed to delete workout exercises: ${exercisesDeleteError.message}`);
+          Alert.alert('Deletion Error', `Failed to delete associated exercises records: ${exercisesDeleteError.message}`);
+          throw exercisesDeleteError;
         }
         
-        console.log('Successfully deleted workout exercises');
+        console.log('[DEL] Step 3 SUCCESS: Successfully deleted workout_exercises.');
+        
+      } else {
+        console.log('[DEL] Steps 2 & 3 skipped: No workout_exercises found, so no sets or exercises to delete.');
       }
       
-      // Finally delete the workout itself
-      const { error } = await supabase
+      // Step 4: Delete the workout itself
+      console.log('[DEL] Step 4: Attempting to delete the main workout entry for ID:', id);
+      const { error: workoutDeleteError } = await supabase
         .from('workouts')
         .delete()
         .eq('id', id);
       
-      if (error) {
-        console.error('Error deleting workout:', error);
-        return;
+      if (workoutDeleteError) {
+        console.error('[DEL] Step 4 FAILED: Error deleting workout:', JSON.stringify(workoutDeleteError, null, 2));
+        setError(`Failed to delete workout: ${workoutDeleteError.message}`);
+        Alert.alert('Deletion Error', `Failed to delete the workout: ${workoutDeleteError.message}`);
+        throw workoutDeleteError;
       }
       
-      console.log('Successfully deleted workout');
-      setDeleteConfirmVisible(false);
-      setForceUpdateCounter(prev => prev + 1);
+      console.log('[DEL] Step 4 SUCCESS: Successfully deleted workout.');
       
-      // Navigate back to refresh the workout history
-      router.replace('/modals/workout-history');
-    } catch (error) {
-      console.error('Error in handleDeleteConfirm:', error);
+      // Step 5: Navigate back AFTER successful deletion
+      console.log('[DEL] Step 5: Deletion successful. Navigating back...');
+      // setForceUpdateCounter(prev => prev + 1); // Probably no longer needed with useFocusEffect on the previous screen
+      router.back(); 
+      console.log('[DEL] Step 5: Navigation initiated.');
+      // Note: setDeleteLoading(false) will be called in the finally block
+      
+    } catch (error: any) {
+      // Catch any error thrown from the try block (including failed deletions)
+      console.error('[DEL] CATCH BLOCK: Deletion process failed.', error);
+      // Error message should have been set and Alert shown already
+      // Ensure loading state is turned off in finally
     } finally {
-      setDeleteLoading(false);
+      console.log('[DEL] Deletion process finished (finally block). Setting deleteLoading to false.');
+      setDeleteLoading(false); // Ensure loading indicator is always turned off
     }
   };
   
@@ -324,21 +363,25 @@ export default function WorkoutDetailModal() {
       
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#ccfbf1" />
+        <Pressable onPress={handleBack} style={styles.backButton} disabled={deleteLoading}>
+          <Ionicons name="arrow-back" size={24} color={deleteLoading ? '#4b5563' : '#ccfbf1'} />
         </Pressable>
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>
+          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
             {workoutData.name} - <Text style={styles.dateText}>{workoutData.formattedDate}</Text>
           </Text>
         </View>
-        <Pressable onPress={handleDeletePress} style={styles.deleteButton}>
-          <Ionicons name="trash-outline" size={22} color="#ef4444" />
+        <Pressable onPress={handleDeletePress} style={styles.deleteButton} disabled={deleteLoading}>
+          <Ionicons name="trash-outline" size={22} color={deleteLoading ? '#4b5563' : '#ef4444'} />
         </Pressable>
       </View>
       
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!deleteLoading}
+      >
         {/* Statistics Card */}
         <WorkoutStatsCard 
           exerciseCount={workoutData.exerciseCount}
@@ -354,6 +397,8 @@ export default function WorkoutDetailModal() {
             <NonDraggableDoneExercise 
               key={exercise.id} 
               exercise={exercise}
+              exerciseId={exercise.exerciseId}
+              onPress={handleExercisePress}
             />
           ))
         ) : (
@@ -372,6 +417,14 @@ export default function WorkoutDetailModal() {
         workoutName={workoutData?.name || 'this workout'}
         context="history"
       />
+
+      {/* Deletion Loading Overlay */}
+      {deleteLoading && (
+        <View style={styles.deleteOverlay}>
+          <ActivityIndicator size="large" color="#14b8a6" />
+          <Text style={styles.deleteOverlayText}>Deleting workout...</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -386,7 +439,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: 24,
     paddingBottom: 16,
     backgroundColor: '#042f2e',
     borderBottomWidth: 1,
@@ -476,5 +529,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#5eead4',
     textAlign: 'center',
+  },
+  deleteOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(2, 26, 25, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  deleteOverlayText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#5eead4',
   },
 }); 

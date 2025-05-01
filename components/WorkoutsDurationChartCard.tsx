@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { supabase } from '../lib/supabase';
 import BarChartCard, { BarChartDataPoint } from './BarChartCard';
@@ -164,16 +164,47 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
   }, [period]);
 
   // Transform workouts data for the bar chart
-  const chartData: BarChartDataPoint[] = workouts.map(workout => {
-    const durationMinutes = durationToMinutes(workout.duration);
+  const chartData: BarChartDataPoint[] = useMemo(() => {
+    console.log("Recalculating chartData...");
+    return workouts.map(workout => {
+      const durationMinutes = durationToMinutes(workout.duration);
+      console.log(`Workout ${workout.id} duration: ${workout.duration} → ${durationMinutes} minutes`);
+      return {
+        date: workout.date,
+        value: durationMinutes,
+      };
+    });
+  }, [workouts]); // Depend only on workouts
+
+  // --- Calculate custom Y-axis ticks --- 
+  const { yAxisTicks, maxDurationValue } = useMemo(() => {
+    if (chartData.length === 0) {
+      return { yAxisTicks: [0], maxDurationValue: 0 }; // Default for empty data
+    }
+
+    // Find the maximum duration in the current chart data
+    const maxDuration = Math.max(...chartData.map(d => d.value), 0);
+
+    // Determine tick interval based on max duration
+    const tickInterval = maxDuration <= 45 ? 5 : 10;
+
+    // Calculate the highest tick value needed (multiple of interval >= maxDuration)
+    const maxTickValue = Math.ceil(maxDuration / tickInterval) * tickInterval;
     
-    console.log(`Workout ${workout.id} duration: ${workout.duration} → ${durationMinutes} minutes`);
+    // Handle the case where maxTickValue is 0 (e.g., all workouts are 0 min)
+    if (maxTickValue === 0) {
+        return { yAxisTicks: [0], maxDurationValue: 0 };
+    }
+
+    // Generate the ticks from 0 up to maxTickValue
+    const ticks: number[] = [];
+    for (let i = 0; i <= maxTickValue; i += tickInterval) {
+      ticks.push(i);
+    }
     
-    return {
-      date: workout.date,
-      value: durationMinutes,
-    };
-  });
+    return { yAxisTicks: ticks, maxDurationValue: maxTickValue };
+
+  }, [chartData]); // Recalculate when chartData changes
 
   // Calculate metrics for display
   const totalWorkouts = workouts.length;
@@ -237,12 +268,15 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
       yAxisSuffix=""
       color="#14b8a6"
       formatYLabel={(yValue) => {
-        const minutes = Math.round(parseInt(yValue) / 10) * 10;
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        return `${hours}:${mins.toString().padStart(2, '0')}`;
+        // Format the exact tick value (already multiple of 5 or 10)
+        const totalMinutes = parseInt(yValue, 10);
+        if (isNaN(totalMinutes) || totalMinutes < 0) return '0:00';
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        return `${hours}:${mins.toString().padStart(2, '0')}`; 
       }}
       yAxisLabelXOffset={32}
+      yAxisTicks={yAxisTicks} // Pass the calculated custom ticks
     />
   );
 } 

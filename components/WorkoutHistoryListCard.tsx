@@ -17,8 +17,9 @@ interface WorkoutHistoryListCardProps {
 
 export default function WorkoutHistoryListCard({ workout, onPress }: WorkoutHistoryListCardProps) {
   // Format duration string from PostgreSQL interval to readable format
-  const formatDuration = (duration: string) => {
-    if (!duration) return '--:--';
+  const formatDuration = (duration: string | null | undefined): string => {
+    // Add more robust check for null/undefined duration
+    if (!duration || typeof duration !== 'string') return '--:--'; 
     
     // Parse PostgreSQL interval format
     const matches = duration.match(/(\d+):(\d+):(\d+)/);
@@ -46,6 +47,13 @@ export default function WorkoutHistoryListCard({ workout, onPress }: WorkoutHist
     return colorMap[muscle] || { bg: 'rgba(75, 85, 99, 0.3)', text: '#4b5563' };
   };
 
+  // Provide default fallbacks for potentially missing data
+  const exerciseCount = workout?.exerciseCount ?? 0;
+  const setCount = workout?.setCount ?? 0;
+  const formattedDate = workout?.formattedDate || 'Unknown Date';
+  const name = workout?.name || 'Unnamed Workout';
+  const duration = formatDuration(workout?.duration);
+
   return (
     <Pressable 
       style={styles.container}
@@ -55,19 +63,19 @@ export default function WorkoutHistoryListCard({ workout, onPress }: WorkoutHist
       <View style={styles.contentContainer}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.date}>{workout.formattedDate} - <Text style={styles.name}>{workout.name}</Text></Text>
+          <Text style={styles.date}>{formattedDate} - <Text style={styles.name}>{name}</Text></Text>
         </View>
         
-        {/* Stats */}
-        <Text style={styles.statsText}>
-          <Text style={styles.statValue}>{workout.exerciseCount}</Text>
+        {/* Stats - Render each part separately with fallbacks */}
+        <View style={styles.statsContainer}>
+          <Text style={styles.statValue}>{exerciseCount}</Text>
           <Text style={styles.statLabel}> exercises</Text>
           <Text style={styles.separator}>  ·  </Text>
-          <Text style={styles.statValue}>{workout.setCount}</Text>
+          <Text style={styles.statValue}>{setCount}</Text>
           <Text style={styles.statLabel}> sets</Text>
           <Text style={styles.separator}>  ·  </Text>
-          <Text style={styles.statValue}>{formatDuration(workout.duration)}</Text>
-        </Text>
+          <Text style={styles.statValue}>{duration}</Text>
+        </View>
       </View>
       
       {/* Chevron icon */}
@@ -109,8 +117,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
   },
-  statsText: {
-    fontSize: 14,
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   statValue: {
     fontSize: 14,
@@ -121,11 +131,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#5eead4',
+    marginLeft: 4,
   },
   separator: {
     color: '#5eead4',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
+    marginHorizontal: 6,
   },
   chevronContainer: {
     width: 24,
