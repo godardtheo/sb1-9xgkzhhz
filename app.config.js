@@ -29,7 +29,7 @@ module.exports = {
       output: "static",
       favicon: "./assets/images/favicon.png"
     },
-    plugins: ["expo-router", "expo-font"],
+    plugins: ["expo-router", "expo-font", "expo-secure-store", "expo-web-browser"],
     experiments: {
       typedRoutes: true,
       tsconfigPaths: true
@@ -41,6 +41,7 @@ module.exports = {
       eas: {
         projectId: "your-project-id"
       }
-    }
+    },
+    "newArchEnabled": true
   }
 };
