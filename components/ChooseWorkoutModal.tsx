@@ -37,7 +37,9 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
   const [loadingNextWorkout, setLoadingNextWorkout] = useState(false);
 
   const muscleGroups = [
-    'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
+    'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
+    'glutes', 'hamstrings', 'lats', 'lower_back', 'quads', 'shoulders', 
+    'triceps', 'upper_back', 'upper_traps'
   ];
 
   // Fetch next workout from active program
@@ -97,11 +99,11 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
           id,
           name,
           description,
-          muscles,
           estimated_duration,
-          template_exercises!inner (
+          template_exercises (
             id,
-            sets
+            exercise_id,
+            sets:template_exercise_sets(count)
           )
         `)
         .eq('user_id', user.id)
@@ -109,14 +111,39 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
 
       if (error) throw error;
 
-      const formattedWorkouts = data?.map(workout => ({
-        ...workout,
-        exercise_count: workout.template_exercises.length,
-        set_count: workout.template_exercises.reduce((total: number, ex: any) => total + (ex.sets || 0), 0)
-      })) || [];
+      const formattedWorkouts = await Promise.all((data || []).map(async (template) => {
+        const exerciseIds = template.template_exercises.map((ex: any) => ex.exercise_id).filter(Boolean);
+        let primaryMuscles: string[] = [];
+        let setCount = template.template_exercises.reduce((total: number, ex: any) => total + (ex.sets?.[0]?.count || 0), 0);
 
-      setWorkouts(formattedWorkouts);
-      setFilteredWorkouts(formattedWorkouts);
+        if (exerciseIds.length > 0) {
+          const { data: exercisesData, error: exercisesError } = await supabase
+            .from('exercises')
+            .select('muscle_primary')
+            .in('id', exerciseIds);
+
+          if (exercisesError) {
+            console.error(`Error fetching primary muscles for exercises ${exerciseIds}:`, exercisesError);
+          } else if (exercisesData) {
+            const allMuscles = exercisesData.flatMap((ex: any) => ex.muscle_primary || []);
+            primaryMuscles = [...new Set(allMuscles)].filter(m => m !== null && m !== undefined) as string[];
+          }
+        }
+
+        return {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          muscles: primaryMuscles,
+          estimated_duration: template.estimated_duration || '0 min',
+          exercise_count: template.template_exercises.length,
+          set_count: setCount,
+        };
+      }));
+
+      const validWorkouts = formattedWorkouts.filter(w => w !== null) as Workout[];
+      setWorkouts(validWorkouts);
+      setFilteredWorkouts(validWorkouts);
     } catch (error: any) {
       console.error('Error fetching workouts:', error);
     } finally {
@@ -161,30 +188,30 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
   // Main options screen content
   const renderMainOptions = () => (
     <>
-      <View style={styles.header}>
-        <Text style={styles.title}>Select workout</Text>
+      <View style={styles.header as any}>
+        <Text style={styles.title as any}>Select workout</Text>
         <Pressable 
           onPress={onClose}
-          style={styles.closeButton}
+          style={styles.closeButton as any}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <X size={24} color="#5eead4" />
         </Pressable>
       </View>
 
-      <View style={styles.optionsContainer}>
+      <View style={styles.optionsContainer as any}>
         {/* Next Workout option */}
         <Pressable 
-          style={styles.optionCard}
+          style={styles.optionCard as any}
           onPress={handleStartNextWorkout}
           disabled={loadingNextWorkout || !nextWorkout?.nextWorkout}
         >
-          <View style={styles.optionIconContainer}>
+          <View style={styles.optionIconContainer as any}>
             <Play size={24} color="#042f2e" />
           </View>
-          <View style={styles.optionInfo}>
-            <Text style={styles.optionTitle}>Next Workout</Text>
-            <Text style={styles.optionSubtitle}>
+          <View style={styles.optionInfo as any}>
+            <Text style={styles.optionTitle as any}>Next Workout</Text>
+            <Text style={styles.optionSubtitle as any}>
               {loadingNextWorkout 
                 ? 'Loading...' 
                 : nextWorkout?.nextWorkout 
@@ -198,30 +225,30 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
 
         {/* From My Workouts option */}
         <Pressable 
-          style={styles.optionCard}
+          style={styles.optionCard as any}
           onPress={() => setShowWorkoutsList(true)}
         >
-          <View style={styles.optionIconContainer}>
+          <View style={styles.optionIconContainer as any}>
             <Dumbbell size={24} color="#042f2e" />
           </View>
-          <View style={styles.optionInfo}>
-            <Text style={styles.optionTitle}>From my workouts</Text>
-            <Text style={styles.optionSubtitle}>Choose a workout template</Text>
+          <View style={styles.optionInfo as any}>
+            <Text style={styles.optionTitle as any}>From my workouts</Text>
+            <Text style={styles.optionSubtitle as any}>Choose a workout template</Text>
           </View>
           <ChevronRight size={20} color="#5eead4" />
         </Pressable>
 
         {/* From Scratch option - Icon updated to PlusCircle */}
         <Pressable 
-          style={styles.optionCard}
+          style={styles.optionCard as any}
           onPress={handleStartFromScratch}
         >
-          <View style={styles.optionIconContainer}>
+          <View style={styles.optionIconContainer as any}>
             <PlusCircle size={24} color="#042f2e" />
           </View>
-          <View style={styles.optionInfo}>
-            <Text style={styles.optionTitle}>From scratch</Text>
-            <Text style={styles.optionSubtitle}>Create a new workout</Text>
+          <View style={styles.optionInfo as any}>
+            <Text style={styles.optionTitle as any}>From scratch</Text>
+            <Text style={styles.optionSubtitle as any}>Create a new workout</Text>
           </View>
           <ChevronRight size={20} color="#5eead4" />
         </Pressable>
@@ -232,28 +259,28 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
   // Workouts list screen content
   const renderWorkoutsList = () => (
     <>
-      <View style={styles.header}>
+      <View style={styles.header as any}>
         <Pressable 
           onPress={() => setShowWorkoutsList(false)}
-          style={styles.backButton}
+          style={styles.backButton as any}
           hitSlop={8}
         >
           <ArrowLeft size={24} color="#5eead4" />
         </Pressable>
-        <Text style={styles.title}>My Workouts</Text>
+        <Text style={styles.title as any}>My Workouts</Text>
         <Pressable 
           onPress={onClose}
-          style={styles.closeButton}
+          style={styles.closeButton as any}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <X size={24} color="#5eead4" />
         </Pressable>
       </View>
 
-      <View style={styles.searchContainer}>
+      <View style={styles.searchContainer as any}>
         <Search size={20} color="#5eead4" />
         <TextInput
-          style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
+          style={[styles.searchInput as any, Platform.OS === 'web' && styles.searchInputWeb]}
           placeholder="Search workouts..."
           placeholderTextColor="#5eead4"
           value={searchQuery}
@@ -264,20 +291,20 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
-        style={styles.muscleGroupsScroll}
-        contentContainerStyle={styles.muscleGroupsContent}
+        style={styles.muscleGroupsScroll as any}
+        contentContainerStyle={styles.muscleGroupsContent as any}
       >
         {muscleGroups.map((muscle) => (
           <Pressable
             key={muscle}
             style={[
-              styles.muscleGroupButton,
+              styles.muscleGroupButton as any,
               selectedMuscle === muscle && styles.selectedMuscleGroup
             ]}
             onPress={() => handleMuscleSelect(muscle)}
           >
             <Text style={[
-              styles.muscleGroupText,
+              styles.muscleGroupText as any,
               selectedMuscle === muscle && styles.selectedMuscleGroupText
             ]}>
               {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
@@ -287,9 +314,9 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
+        <View style={styles.loadingContainer as any}>
           <ActivityIndicator size="large" color="#14b8a6" />
-          <Text style={styles.loadingText}>Loading workouts...</Text>
+          <Text style={styles.loadingText as any}>Loading workouts...</Text>
         </View>
       ) : (
         <FlatList
@@ -297,31 +324,31 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
             <Pressable 
-              style={styles.workoutItem}
+              style={styles.workoutItem as any}
               onPress={() => handleSelectWorkout(item.id)}
             >
-              <View style={styles.workoutImagePlaceholder}>
-                <Text style={styles.workoutImageText}>
+              <View style={styles.workoutImagePlaceholder as any}>
+                <Text style={styles.workoutImageText as any}>
                   {item.name.charAt(0).toUpperCase()}
                 </Text>
               </View>
-              <View style={styles.workoutInfo}>
-                <Text style={styles.workoutName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.workoutStats}>
+              <View style={styles.workoutInfo as any}>
+                <Text style={styles.workoutName as any} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.workoutStats as any}>
                   {item.exercise_count || 0} exercises • {item.set_count || 0} sets • {formatDuration(parseDurationToMinutes(item.estimated_duration))}
                 </Text>
                 {item.muscles && item.muscles.length > 0 && (
-                  <View style={styles.muscleChips}>
+                  <View style={styles.muscleChips as any}>
                     {item.muscles.slice(0, 3).map((muscle, index) => (
-                      <View key={index} style={styles.muscleChip}>
-                        <Text style={styles.muscleChipText}>
-                          {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
+                      <View key={index} style={styles.muscleChip as any}>
+                        <Text style={styles.muscleChipText as any}>
+                          {muscle && typeof muscle === 'string' ? muscle.charAt(0).toUpperCase() + muscle.slice(1) : ''}
                         </Text>
                       </View>
                     ))}
                     {item.muscles.length > 3 && (
-                      <View style={styles.muscleChip}>
-                        <Text style={styles.muscleChipText}>+{item.muscles.length - 3}</Text>
+                      <View style={styles.muscleChip as any}>
+                        <Text style={styles.muscleChipText as any}>+{item.muscles.length - 3}</Text>
                       </View>
                     )}
                   </View>
@@ -330,10 +357,10 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
               <ChevronRight size={20} color="#5eead4" />
             </Pressable>
           )}
-          contentContainerStyle={styles.workoutsList}
+          contentContainerStyle={styles.workoutsList as any}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No workouts found</Text>
+            <View style={styles.emptyState as any}>
+              <Text style={styles.emptyStateText as any}>No workouts found</Text>
             </View>
           }
         />
@@ -348,14 +375,14 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
       onRequestClose={onClose}
       animationType="fade"
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+      <View style={styles.overlay as any}>
+        <Pressable style={styles.backdrop as any} onPress={onClose} />
         <Animated.View 
-          style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
+          style={styles.modalContainer as any}
+          entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
           exiting={SlideOutDown.springify().damping(15)}
         >
-          <View style={styles.modalContent}>
+          <View style={styles.modalContent as any}>
             {showWorkoutsList ? renderWorkoutsList() : renderMainOptions()}
           </View>
         </Animated.View>
@@ -364,7 +391,7 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
   );
 }
 
-const styles = StyleSheet.create<{[key: string]: ViewStyle | TextStyle | ImageStyle}>({
+const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -469,24 +496,27 @@ const styles = StyleSheet.create<{[key: string]: ViewStyle | TextStyle | ImageSt
     marginLeft: 12,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    height: Platform.OS === 'web' ? 24 : 'auto',
+    height: Platform.OS === 'web' ? 24 : undefined,
     padding: 0,
   },
   searchInputWeb: {
-    outlineWidth: 0,
+    // outlineWidth: 0,
   },
   muscleGroupsScroll: {
     maxHeight: 40,
+    marginBottom: 8,
   },
   muscleGroupsContent: {
     paddingHorizontal: 16,
     gap: 8,
+    alignItems: 'center',
   },
   muscleGroupButton: {
     backgroundColor: '#115e59',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    justifyContent: 'center',
   },
   selectedMuscleGroup: {
     backgroundColor: '#14b8a6',
@@ -495,9 +525,11 @@ const styles = StyleSheet.create<{[key: string]: ViewStyle | TextStyle | ImageSt
     color: '#5eead4',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
+    textAlign: 'center',
   },
   selectedMuscleGroupText: {
     color: '#042f2e',
+    fontFamily: 'Inter-Medium',
   },
   workoutsList: {
     padding: 16,

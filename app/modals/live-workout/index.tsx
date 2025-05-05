@@ -29,6 +29,7 @@ import RestTimerModal from '@/components/RestTimerModal';
 import { Audio } from 'expo-av';
 import { useWorkoutProgressStore } from '@/lib/store/workoutProgressStore';
 import uuid from 'react-native-uuid';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Exercise = {
   id: string;
@@ -36,7 +37,7 @@ type Exercise = {
   muscle: string;
   muscle_primary?: string[];
   muscle_secondary?: string[];
-  equipment: string | string[];
+  equipment?: string | string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -68,6 +69,9 @@ export default function LiveWorkoutScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
+
   // Display duration - this will be updated from the global timer
   const [displayDuration, setDisplayDuration] = useState(0);
 
@@ -92,8 +96,6 @@ export default function LiveWorkoutScreen() {
   const displayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const restTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const cardRefs = useRef<(null | { animateMove: (direction: -1 | 1, distance: number) => void })[]>([]);
-  const [itemHeights, setItemHeights] = useState<number[]>([]);
 
   // Animated values
   const progressValue = useSharedValue(0);
@@ -209,7 +211,7 @@ export default function LiveWorkoutScreen() {
     // Then update every second
     displayTimerRef.current = setInterval(() => {
       setDisplayDuration(workoutProgress.getCurrentDuration());
-    }, 1000);
+    }, 1000) as any;
   };
 
   const loadWorkoutTemplate = async (templateId: string) => {
@@ -264,23 +266,31 @@ export default function LiveWorkoutScreen() {
           // Process exercises and get previous performances
           const processedExercises = await Promise.all(
             templateExercises.map(async (item) => {
+              const exerciseDetails = item.exercises as any;
               // Get previous performance for this exercise
               const previousPerformance = await getPreviousPerformance(
-                item.exercises.id
+                exerciseDetails.id
               );
 
+              // Gérer le format de l'équipement 
+              let equipmentValue: string | string[] | undefined = undefined;
+              if (Array.isArray(exerciseDetails.equipment)) {
+                equipmentValue = exerciseDetails.equipment;
+              } else if (typeof exerciseDetails.equipment === 'string') {
+                equipmentValue = exerciseDetails.equipment; 
+              } // Keep undefined if not string or array
+
               return {
-                id: item.exercises.id,
-                name: item.exercises.name,
-                muscle_primary: item.exercises.muscle_primary || [],
-                muscle_secondary: item.exercises.muscle_secondary || [],
-                equipment: Array.isArray(item.exercises.equipment) 
-                  ? item.exercises.equipment 
-                  : (item.exercises.equipment ? [item.exercises.equipment] : []),
-                instructions: item.exercises.instructions,
-                video_url: item.exercises.video_url,
-                type: item.exercises.type,
-                difficulty: item.exercises.difficulty,
+                id: exerciseDetails.id,
+                name: exerciseDetails.name,
+                muscle: exerciseDetails.muscle || '',
+                muscle_primary: exerciseDetails.muscle_primary || [],
+                muscle_secondary: exerciseDetails.muscle_secondary || [],
+                equipment: equipmentValue, // Assign the potentially mixed type or undefined
+                instructions: exerciseDetails.instructions,
+                video_url: exerciseDetails.video_url,
+                type: exerciseDetails.type,
+                difficulty: exerciseDetails.difficulty,
                 sets: item.template_exercise_sets.map((set, index) => {
                   const prevSet = previousPerformance[index] || {};
                   return {
@@ -296,7 +306,8 @@ export default function LiveWorkoutScreen() {
             })
           );
 
-          setExercises(processedExercises);
+          // Utiliser un cast explicite pour setExercises si le type inféré pose problème
+          setExercises(processedExercises as Exercise[]);
         }
       }
     } catch (err: any) {
@@ -479,7 +490,7 @@ export default function LiveWorkoutScreen() {
         }
         return prev - 1;
       });
-    }, 1000);
+    }, 1000) as any;
   };
   
   const resumeRestTimer = (timeRemaining: number) => {
@@ -501,7 +512,7 @@ export default function LiveWorkoutScreen() {
         }
         return prev - 1;
       });
-    }, 1000);
+    }, 1000) as any;
   };
 
   const resetRestTimer = () => {
@@ -703,7 +714,7 @@ export default function LiveWorkoutScreen() {
 
   const handleExerciseSelection = (selectedExercises: any[]) => {
     // Traite les exercices dans l'ordre exact de sélection
-    const newExercises = selectedExercises.map(exercise => {
+    const newExercises: Exercise[] = selectedExercises.map(exercise => {
       // Création des sets pour chaque exercice sélectionné
       const exerciseSets = Array(4).fill(null).map(() => ({
         id: uuid.v4() as string,
@@ -716,22 +727,22 @@ export default function LiveWorkoutScreen() {
 
       // Gérer la compatibilité avec l'ancien format pour muscle_primary
       let muscle_primary = exercise.muscle_primary || [];
-      if (!muscle_primary.length && exercise.muscle) {
-        muscle_primary = [exercise.muscle];
-      }
 
-      // Gérer le format de l'équipement
-      let equipment = exercise.equipment || [];
-      if (!Array.isArray(equipment) && equipment) {
-        equipment = [equipment];
-      }
+      // Gérer le format de l'équipement 
+      let equipmentValue: string | string[] | undefined = undefined;
+      if (Array.isArray(exercise.equipment)) {
+        equipmentValue = exercise.equipment;
+      } else if (typeof exercise.equipment === 'string') {
+        equipmentValue = exercise.equipment; 
+      } // Keep undefined if not string or array
 
       return {
         id: exercise.id,
         name: exercise.name,
+        muscle: exercise.muscle || '',
         muscle_primary: muscle_primary,
         muscle_secondary: exercise.muscle_secondary || [],
-        equipment: equipment,
+        equipment: equipmentValue, // Assign the potentially mixed type or undefined
         instructions: exercise.instructions,
         video_url: exercise.video_url,
         type: exercise.type,
@@ -741,14 +752,12 @@ export default function LiveWorkoutScreen() {
     });
 
     // Ajoute les nouveaux exercices à la fin de la liste existante, préservant l'ordre de sélection
-    setExercises(exercises => [...exercises, ...newExercises]);
+    setExercises(prevExercises => [...prevExercises, ...newExercises]);
     setShowExerciseModal(false);
   };
 
   const handleExerciseInfo = (exercise: Exercise) => {
-    // Utiliser push avec un flag de redirection pour éviter l'empilement tout en préservant le contexte
-    // Le paramètre 'source: live-workout' nous permettra de savoir d'où vient l'utilisateur si nécessaire
-    router.push({
+    router.navigate({
       pathname: "/modals/exercise-details/[id]",
       params: { id: exercise.id, source: 'live-workout' }
     });
@@ -795,32 +804,24 @@ export default function LiveWorkoutScreen() {
     };
   });
 
-  const updateItemHeight = (index: number, height: number) => {
-    setItemHeights(prev => {
-      const arr = [...prev];
-      arr[index] = height;
-      return arr;
-    });
-  };
-
   const handleMoveUp = (index: number) => {
     if (index > 0) {
-      const distance = itemHeights[index - 1] || 60;
-      cardRefs.current[index]?.animateMove(-1, distance);
-      cardRefs.current[index - 1]?.animateMove(1, itemHeights[index] || 60);
       setTimeout(() => {
-        reorderExercises(index, index - 1);
-      }, 150);
+        const reordered = [...exercises];
+        const [removed] = reordered.splice(index, 1);
+        reordered.splice(index - 1, 0, removed);
+        setExercises(reordered);
+      }, 0);
     }
   };
   const handleMoveDown = (index: number) => {
     if (index < exercises.length - 1) {
-      const distance = itemHeights[index + 1] || 60;
-      cardRefs.current[index]?.animateMove(1, distance);
-      cardRefs.current[index + 1]?.animateMove(-1, itemHeights[index] || 60);
       setTimeout(() => {
-        reorderExercises(index, index + 1);
-      }, 150);
+        const reordered = [...exercises];
+        const [removed] = reordered.splice(index, 1);
+        reordered.splice(index + 1, 0, removed);
+        setExercises(reordered);
+      }, 0);
     }
   };
 
@@ -836,7 +837,7 @@ export default function LiveWorkoutScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <View style={styles.headerTop}>
           <Pressable
             onPress={handleBackPress}
@@ -900,7 +901,6 @@ export default function LiveWorkoutScreen() {
             exercises.map((exercise, index) => (
               <LiveExerciseCard
                 key={exercise.id}
-                ref={el => { if (el) cardRefs.current[index] = el; }}
                 exercise={exercise}
                 index={index}
                 onRemove={removeExercise}
@@ -912,7 +912,6 @@ export default function LiveWorkoutScreen() {
                 onMoveDown={handleMoveDown}
                 totalExercises={exercises.length}
                 isInWorkout={true}
-                onLayout={event => updateItemHeight(index, event.nativeEvent.layout.height)}
               />
             ))
           )}
@@ -1034,7 +1033,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 24 : 24,
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: '#021a19',

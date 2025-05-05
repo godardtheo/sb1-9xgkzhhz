@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Platform } from 'react-native';
 import { X } from 'lucide-react-native';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
@@ -32,7 +32,7 @@ export default function DeleteWorkoutConfirmation({
         <Pressable style={styles.backdrop} onPress={onClose} />
         <Animated.View 
           style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
+          entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
           exiting={SlideOutDown.springify().damping(15)}
         >
           <View style={styles.modalContent}>

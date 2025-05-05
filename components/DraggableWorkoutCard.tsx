@@ -7,6 +7,8 @@ import Animated, {
   withTiming,
   runOnJS,
   SharedValue,
+  Layout,
+  SequencedTransition,
 } from 'react-native-reanimated';
 import { Trash2, GripVertical, Info, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react-native';
 import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
@@ -19,84 +21,35 @@ type MuscleCount = {
   setCount: number;
 };
 
-type Workout = {
+// Renommer et aligner avec le type utilisé dans les écrans parents
+type WorkoutCardData = {
   id: string;
   name: string;
   description: string | null;
-  muscles: string[]; // Keep basic list for now, might be unused depending on final implementation
-  musclesWithCounts: MuscleCount[]; // Expect the sorted list with counts
+  muscles: string[];
+  musclesWithCounts: MuscleCount[]; // Ajouter ce champ
   estimated_duration: string;
-  exercise_count?: number; // Keep optional as parent might not always provide it
-  set_count?: number; // Total set count
-  template_id?: string; // Added for program workout reference
+  exercise_count?: number;
+  set_count?: number; 
+  template_id?: string;
 };
 
 type Props = {
-  workout: Workout;
+  workout: WorkoutCardData; // Utiliser le type aligné
   index: number;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
   onRemove: (id: string) => void;
   onPress?: () => void;
-  onInfo?: (workout: Workout) => void;
+  onInfo?: (workout: WorkoutCardData) => void;
   totalWorkouts: number;
   scrollRef?: React.RefObject<any>;
 };
 
-const SPRING_CONFIG = {
-  damping: 18,
-  stiffness: 180,
-  mass: 0.5,
-  overshootClamping: false,
-  restDisplacementThreshold: 0.01,
-  restSpeedThreshold: 2,
-};
-
 const DraggableWorkoutCard = forwardRef<
-  { animateMove: (direction: -1 | 1, distance: number) => void },
+  {},
   Props
 >(({ workout, index, onMoveUp, onMoveDown, onRemove, onPress, onInfo, totalWorkouts }, ref) => {
-  // Animation values
-  const isMoving = useSharedValue(false);
-  const offsetY = useSharedValue(0);
-  const direction = useSharedValue(0); // -1 for up, 1 for down
-
-  // Setup animation method that can be called from parent
-  const animateMove = (dir: -1 | 1, distance: number) => {
-    direction.value = dir;
-    offsetY.value = distance;
-    isMoving.value = true;
-    setTimeout(() => {
-      isMoving.value = false;
-      offsetY.value = 0;
-    }, 250);
-  };
-  useImperativeHandle(ref, () => ({ animateMove }));
-
-  // Animated styles
-  const animatedStyle = useAnimatedStyle(() => {
-    if (!isMoving.value) return {};
-    return {
-      zIndex: 20,
-      transform: [
-        { translateY: withSpring(direction.value * offsetY.value, SPRING_CONFIG) },
-        { scale: withSpring(1.02, SPRING_CONFIG) },
-      ],
-      shadowColor: '#0e7490',
-      shadowOpacity: withTiming(0.25, { duration: 150 }),
-      shadowRadius: withTiming(10, { duration: 150 }),
-      elevation: 10,
-    };
-  });
-  const backgroundStyle = useAnimatedStyle(() => {
-    return {
-      backgroundColor: withTiming(
-        isMoving.value ? '#179186' : '#115e59',
-        { duration: isMoving.value ? 150 : 120 }
-      ),
-    };
-  });
-
   // Helper to capitalize first letter
   const capitalizeFirstLetter = (string: string) => {
     if (!string || typeof string !== 'string') return '';
@@ -104,62 +57,62 @@ const DraggableWorkoutCard = forwardRef<
   };
 
   return (
-    <View style={webOnlyStyle as any}>
-      <Animated.View style={[styles.container, backgroundStyle, animatedStyle]}>
-        <View style={styles.workoutHeader}>
-          <View style={styles.workoutInfo}>
-            <Text style={styles.workoutName}>{workout.name}</Text>
-            <View style={styles.workoutDetails}>
-              <Text style={styles.workoutStats}>
-                {workout.exercise_count} exercises • {workout.set_count || 0} sets • {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
-              </Text>
+    <Animated.View 
+      layout={Layout.springify().damping(18).stiffness(180)}
+      style={[styles.container]}
+    >
+      <View style={styles.workoutHeader}>
+        <View style={styles.workoutInfo}>
+          <Text style={styles.workoutName}>{workout.name}</Text>
+          <View style={styles.workoutDetails}>
+            <Text style={styles.workoutStats}>
+              {workout.exercise_count} exercises • {workout.set_count || 0} sets • {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.workoutActions}>
+          {onInfo && (
+            <Pressable onPress={() => onInfo(workout)} style={styles.actionButton} hitSlop={8}>
+              <Info size={20} color="#5eead4" />
+            </Pressable>
+          )}
+          <Pressable onPress={() => onRemove(workout.id)} style={styles.actionButton} hitSlop={8}>
+            <Trash2 size={20} color="#5eead4" />
+          </Pressable>
+        </View>
+      </View>
+      <View style={styles.workoutContent}>
+        <View style={styles.muscleChips}>
+          {workout.musclesWithCounts && workout.musclesWithCounts.slice(0, 2).map((muscleInfo) => (
+            <View key={muscleInfo.muscle || 'unknown'} style={styles.muscleChip}>
+              <Text style={styles.muscleChipText}>{capitalizeFirstLetter(muscleInfo.muscle)}</Text>
             </View>
-          </View>
-          <View style={styles.workoutActions}>
-            {onInfo && (
-              <Pressable onPress={() => onInfo(workout)} style={styles.actionButton} hitSlop={8}>
-                <Info size={20} color="#5eead4" />
-              </Pressable>
-            )}
-            <Pressable onPress={() => onRemove(workout.id)} style={styles.actionButton} hitSlop={8}>
-              <Trash2 size={20} color="#5eead4" />
-            </Pressable>
-          </View>
-        </View>
-        <View style={styles.workoutContent}>
-          <View style={styles.muscleChips}>
-            {workout.musclesWithCounts && workout.musclesWithCounts.slice(0, 2).map((muscleInfo) => (
-              <View key={muscleInfo.muscle || 'unknown'} style={styles.muscleChip}>
-                <Text style={styles.muscleChipText}>{capitalizeFirstLetter(muscleInfo.muscle)}</Text>
-              </View>
-            ))}
-            {workout.musclesWithCounts && workout.musclesWithCounts.length > 2 && (
-              <View style={[styles.muscleChip, styles.moreChip]}>
-                <Text style={styles.muscleChipText}>+{workout.musclesWithCounts.length - 2}</Text>
-              </View>
-            )}
-          </View>
-          {onPress && (
-            <Pressable onPress={onPress} style={styles.viewButton}>
-              <ChevronRight size={20} color="#5eead4" />
-            </Pressable>
+          ))}
+          {workout.musclesWithCounts && workout.musclesWithCounts.length > 2 && (
+            <View style={[styles.muscleChip, styles.moreChip]}>
+              <Text style={styles.muscleChipText}>+{workout.musclesWithCounts.length - 2}</Text>
+            </View>
           )}
         </View>
-        {/* Up/Down buttons à la place du drag handle */}
-        <View style={styles.reorderButtonsContainer}>
-          {index > 0 && (
-            <Pressable onPress={() => onMoveUp(index)} style={styles.arrowButton} hitSlop={8}>
-              <ArrowUp size={20} color="#5eead4" />
-            </Pressable>
-          )}
-          {index < totalWorkouts - 1 && (
-            <Pressable onPress={() => onMoveDown(index)} style={styles.arrowButton} hitSlop={8}>
-              <ArrowDown size={20} color="#5eead4" />
-            </Pressable>
-          )}
-        </View>
-      </Animated.View>
-    </View>
+        {onPress && (
+          <Pressable onPress={onPress} style={styles.viewButton}>
+            <ChevronRight size={20} color="#5eead4" />
+          </Pressable>
+        )}
+      </View>
+      <View style={styles.reorderButtonsContainer}>
+        {index > 0 && (
+          <Pressable onPress={() => onMoveUp(index)} style={styles.arrowButton} hitSlop={8}>
+            <ArrowUp size={20} color="#5eead4" />
+          </Pressable>
+        )}
+        {index < totalWorkouts - 1 && (
+          <Pressable onPress={() => onMoveDown(index)} style={styles.arrowButton} hitSlop={8}>
+            <ArrowDown size={20} color="#5eead4" />
+          </Pressable>
+        )}
+      </View>
+    </Animated.View>
   );
 });
 
@@ -249,7 +202,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
     width: 'auto',
   },
   arrowButton: {
@@ -260,8 +213,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 0,
+    ...Platform.select({
+      android: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+      }
+    })
   },
 });
 
 // Ajout d'un style web spécifique à appliquer sur un wrapper View (pas Animated.View)
-const webOnlyStyle = Platform.OS === 'web' ? { cursor: 'default', userSelect: 'none' } : {};
+// On supprime l'utilisation de cette variable pour l'instant
+// const webOnlyStyle = Platform.OS === 'web' ? { cursor: 'default', userSelect: 'none' } : {};

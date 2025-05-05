@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Platform, Image, ViewStyle, TextStyle, ImageStyle, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, TextInput, ActivityIndicator, Platform, Image, ViewStyle, TextStyle, ImageStyle, TouchableWithoutFeedback, Keyboard, StyleProp } from 'react-native';
 import { X, Camera, Upload, ChevronDown } from 'lucide-react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -92,28 +92,28 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <Animated.View 
-          style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
+          style={styles.modalContainer as ViewStyle}
+          entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
           exiting={SlideOutDown.springify().damping(15)}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-            <View style={styles.modalContent}>
-              <View style={styles.header}>
-                <Text style={styles.title}>Edit Profile</Text>
+            <View style={styles.modalContent as ViewStyle}>
+              <View style={styles.header as ViewStyle}>
+                <Text style={styles.title as TextStyle}>Edit Profile</Text>
                 <Pressable 
                   onPress={onClose}
-                  style={styles.closeButton}
+                  style={styles.closeButton as ViewStyle}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <X size={24} color="#5eead4" />
                 </Pressable>
               </View>
 
-              <View style={styles.form}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Full Name</Text>
+              <View style={styles.form as ViewStyle}>
+                <View style={styles.inputGroup as ViewStyle}>
+                  <Text style={styles.label as TextStyle}>Full Name</Text>
                   <TextInput
-                    style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
+                    style={[styles.input, Platform.OS === 'web' && styles.inputWeb].filter(Boolean) as StyleProp<TextStyle>}
                     value={fullName}
                     onChangeText={setFullName}
                     placeholder="Enter your full name"
@@ -121,10 +121,10 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Username</Text>
+                <View style={styles.inputGroup as ViewStyle}>
+                  <Text style={styles.label as TextStyle}>Username</Text>
                   <TextInput
-                    style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
+                    style={[styles.input, Platform.OS === 'web' && styles.inputWeb].filter(Boolean) as StyleProp<TextStyle>}
                     value={username}
                     onChangeText={setUsername}
                     placeholder="Choose a username"
@@ -132,11 +132,11 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                   />
                 </View>
 
-                <View style={styles.rowInputs}>
-                  <View style={[styles.inputGroup, styles.flexHalf]}>
-                    <Text style={styles.label}>Height (cm)</Text>
+                <View style={styles.rowInputs as ViewStyle}>
+                  <View style={[styles.inputGroup, styles.flexHalf].filter(Boolean) as StyleProp<ViewStyle>}>
+                    <Text style={styles.label as TextStyle}>Height (cm)</Text>
                     <TextInput
-                      style={[styles.input, Platform.OS === 'web' && styles.inputWeb]}
+                      style={[styles.input, Platform.OS === 'web' && styles.inputWeb].filter(Boolean) as StyleProp<TextStyle>}
                       value={height}
                       onChangeText={(value) => {
                         const filtered = value.replace(/[^0-9.]/g, '');
@@ -151,14 +151,14 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                     />
                   </View>
 
-                  <View style={[styles.inputGroup, styles.flexHalf]}>
-                    <Text style={styles.label}>Gender</Text>
-                    <View style={styles.dropdownContainer}>
+                  <View style={[styles.inputGroup, styles.flexHalf].filter(Boolean) as StyleProp<ViewStyle>}>
+                    <Text style={styles.label as TextStyle}>Gender</Text>
+                    <View style={styles.dropdownContainer as ViewStyle}>
                       <Pressable
-                        style={[styles.input, styles.selectInput]}
+                        style={[styles.input, styles.selectInput].filter(Boolean) as StyleProp<ViewStyle>}
                         onPress={() => setShowGenderDropdown(!showGenderDropdown)}
                       >
-                        <Text style={[styles.selectText, !gender && styles.placeholderText]}>
+                        <Text style={[styles.selectText, !gender && styles.placeholderText].filter(Boolean) as StyleProp<TextStyle>}>
                           {gender || 'Gender'}
                         </Text>
                         <ChevronDown size={20} color="#5eead4" />
@@ -166,8 +166,8 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                       
                       {showGenderDropdown && (
                         <Animated.View 
-                          style={[styles.dropdown]}
-                          entering={FadeIn.duration(200)}
+                          style={[styles.dropdown].filter(Boolean) as StyleProp<ViewStyle>}
+                          entering={Platform.OS === 'android' ? undefined : FadeIn.duration(200)}
                           layout={Layout.springify()}
                         >
                           {GENDER_OPTIONS.map((option) => (
@@ -176,7 +176,7 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                               style={[
                                 styles.dropdownItem,
                                 gender === option && styles.dropdownItemSelected
-                              ]}
+                              ].filter(Boolean) as StyleProp<ViewStyle>}
                               onPress={() => {
                                 setGender(option);
                                 setShowGenderDropdown(false);
@@ -185,7 +185,7 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                               <Text style={[
                                 styles.dropdownText,
                                 gender === option && styles.dropdownTextSelected
-                              ]}>
+                              ].filter(Boolean) as StyleProp<TextStyle>}>
                                 {option}
                               </Text>
                             </Pressable>
@@ -197,27 +197,27 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                 </View>
 
                 {error && (
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorText as TextStyle}>{error}</Text>
                 )}
 
                 {success && (
                   <Animated.View 
-                    style={styles.successMessage}
+                    style={styles.successMessage as ViewStyle}
                     entering={FadeIn.duration(200)}
                   >
-                    <Text style={styles.successText}>Profile updated successfully!</Text>
+                    <Text style={styles.successText as TextStyle}>Profile updated successfully!</Text>
                   </Animated.View>
                 )}
 
                 <Pressable 
-                  style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                  style={[styles.saveButton, loading && styles.saveButtonDisabled].filter(Boolean) as StyleProp<ViewStyle>}
                   onPress={handleUpdateProfile}
                   disabled={loading}
                 >
                   {loading ? (
                     <ActivityIndicator color="#021a19" />
                   ) : (
-                    <Text style={styles.saveButtonText}>Save Changes</Text>
+                    <Text style={styles.saveButtonText as TextStyle}>Save Changes</Text>
                   )}
                 </Pressable>
               </View>
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   inputWeb: {
-    outlineStyle: 'none',
+    // outlineStyle: 'none', // Removed: Not valid in React Native
   },
   selectInput: {
     flexDirection: 'row',

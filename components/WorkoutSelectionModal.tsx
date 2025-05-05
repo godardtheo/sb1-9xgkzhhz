@@ -213,198 +213,241 @@ export default function WorkoutSelectionModal({ visible, onClose, onSelect, excl
     onClose();
   };
 
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      onRequestClose={onClose}
-      animationType="fade"
-    >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Workout selection</Text>
-              <Pressable 
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
-            </View>
+  // Common content renderer
+  const renderContent = () => (
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Workout selection</Text>
+          <Pressable 
+            onPress={onClose}
+            style={styles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <X size={24} color="#5eead4" />
+          </Pressable>
+        </View>
 
-            <View style={styles.searchContainer}>
-              <Search size={20} color="#5eead4" />
-              <TextInput
-                style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
-                placeholder="Search workouts..."
-                placeholderTextColor="#5eead4"
-                value={searchQuery}
-                onChangeText={handleSearch}
-              />
-            </View>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#5eead4" />
+          <TextInput
+            style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
+            placeholder="Search workouts..."
+            placeholderTextColor="#5eead4"
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+        </View>
 
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.muscleGroupsScroll}
-              contentContainerStyle={styles.muscleGroupsContent}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.muscleGroupsScroll}
+          contentContainerStyle={styles.muscleGroupsContent}
+        >
+          {muscleGroups.map((muscle) => (
+            <Pressable
+              key={muscle}
+              style={[
+                styles.muscleGroupButton,
+                selectedMuscle === muscle && styles.selectedMuscleGroup
+              ]}
+              onPress={() => handleMuscleSelect(muscle)}
             >
-              {muscleGroups.map((muscle) => (
+              {(() => {
+                // Format display text: capitalize first letter, replace underscores
+                let displayText = muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ') : '';
+                // Specific overrides if needed (though the above should handle these cases)
+                if (muscle === 'upper_back') {
+                  displayText = 'Upper back';
+                } else if (muscle === 'upper_traps') {
+                  displayText = 'Upper traps';
+                }
+                return (
+                  <Text style={[
+                    styles.muscleGroupText,
+                    selectedMuscle === muscle && styles.selectedMuscleGroupText
+                  ]}>
+                    {displayText}
+                  </Text>
+                );
+              })()}
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView 
+          style={styles.workoutsList}
+          contentContainerStyle={styles.workoutsListContent}
+        >
+          {loading ? (
+            <Text style={styles.statusText}>Loading workouts...</Text>
+          ) : filteredWorkouts.length === 0 ? (
+            <Text style={styles.statusText}>No workouts found</Text>
+          ) : (
+            filteredWorkouts.map((workout) => {
+              // Check if the workout ID exists in the selectedWorkouts array of objects
+              const selectionInfo = selectedWorkouts.find(item => item.id === workout.id);
+              const isSelected = !!selectionInfo;
+              const selectionOrder = selectionInfo ? selectionInfo.order + 1 : undefined;
+
+              return (
                 <Pressable
-                  key={muscle}
-                  style={[
-                    styles.muscleGroupButton,
-                    selectedMuscle === muscle && styles.selectedMuscleGroup
-                  ]}
-                  onPress={() => handleMuscleSelect(muscle)}
+                  key={workout.id}
+                  style={styles.workoutItemContainer}
+                  onPress={() => toggleWorkoutSelection(workout.id)}
                 >
-                  {(() => {
-                    // Format display text: capitalize first letter, replace underscores
-                    let displayText = muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ') : '';
-                    // Specific overrides if needed (though the above should handle these cases)
-                    if (muscle === 'upper_back') {
-                      displayText = 'Upper back';
-                    } else if (muscle === 'upper_traps') {
-                      displayText = 'Upper traps';
-                    }
-                    return (
-                      <Text style={[
-                        styles.muscleGroupText,
-                        selectedMuscle === muscle && styles.selectedMuscleGroupText
-                      ]}>
-                        {displayText}
-                      </Text>
-                    );
-                  })()}
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <ScrollView 
-              style={styles.workoutsList}
-              contentContainerStyle={styles.workoutsListContent}
-            >
-              {loading ? (
-                <Text style={styles.statusText}>Loading workouts...</Text>
-              ) : filteredWorkouts.length === 0 ? (
-                <Text style={styles.statusText}>No workouts found</Text>
-              ) : (
-                filteredWorkouts.map((workout) => {
-                  // Check if the workout ID exists in the selectedWorkouts array of objects
-                  const selectionInfo = selectedWorkouts.find(item => item.id === workout.id);
-                  const isSelected = !!selectionInfo;
-                  const selectionOrder = selectionInfo ? selectionInfo.order + 1 : undefined;
-
-                  return (
-                    <Pressable
-                      key={workout.id}
-                      style={styles.workoutItemContainer}
-                      onPress={() => toggleWorkoutSelection(workout.id)}
-                    >
-                      <Animated.View 
-                        style={[
-                          styles.workoutItem,
-                          isSelected && styles.workoutItemSelected
-                        ]}
-                        entering={FadeIn.duration(200)}
-                        exiting={FadeOut.duration(200)}
-                      >
-                        <View style={styles.workoutContent}>
-                          <View style={styles.workoutImagePlaceholder}>
-                            <Text style={styles.workoutImageText}>
-                              {workout.name ? workout.name.charAt(0).toUpperCase() : 'W'}
-                            </Text>
-                          </View>
-                          <View style={styles.workoutInfo}>
-                            <Text 
-                              style={styles.workoutName}
-                              numberOfLines={1}
-                            >
-                              {workout.name}
-                            </Text>
-                            <View style={styles.workoutStats}>
-                              <Text style={styles.workoutStatsText}>
-                                {workout.exercise_count || 0} exercises • {workout.set_count || 0} sets • {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
+                  <Animated.View 
+                    style={[
+                      styles.workoutItem,
+                      isSelected && styles.workoutItemSelected
+                    ]}
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(200)}
+                  >
+                    <View style={styles.workoutContent}>
+                      <View style={styles.workoutImagePlaceholder}>
+                        <Text style={styles.workoutImageText}>
+                          {workout.name ? workout.name.charAt(0).toUpperCase() : 'W'}
+                        </Text>
+                      </View>
+                      <View style={styles.workoutInfo}>
+                        <Text 
+                          style={styles.workoutName}
+                          numberOfLines={1}
+                        >
+                          {workout.name}
+                        </Text>
+                        <View style={styles.workoutStats}>
+                          <Text style={styles.workoutStatsText}>
+                            {workout.exercise_count || 0} exercises • {workout.set_count || 0} sets • {formatDuration(parseDurationToMinutes(workout.estimated_duration))}
+                          </Text>
+                        </View>
+                        <View style={styles.muscleTags}>
+                          {workout.muscles && workout.muscles.slice(0, 3).map((muscle) => (
+                            <View key={muscle || 'unknown'} style={styles.muscleTag}>
+                              <Text style={styles.muscleTagText}>
+                                {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : 'Unknown'}
                               </Text>
                             </View>
-                            <View style={styles.muscleTags}>
-                              {workout.muscles && workout.muscles.slice(0, 3).map((muscle) => (
-                                <View key={muscle || 'unknown'} style={styles.muscleTag}>
-                                  <Text style={styles.muscleTagText}>
-                                    {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : 'Unknown'}
-                                  </Text>
-                                </View>
-                              ))}
-                              {workout.muscles && workout.muscles.length > 3 && (
-                                <View style={[styles.muscleTag, styles.moreTag]}>
-                                  <Text style={styles.muscleTagText}>
-                                    +{workout.muscles.length - 3}
-                                  </Text>
-                                </View>
-                              )}
+                          ))}
+                          {workout.muscles && workout.muscles.length > 3 && (
+                            <View style={[styles.muscleTag, styles.moreTag]}>
+                              <Text style={styles.muscleTagText}>
+                                +{workout.muscles.length - 3}
+                              </Text>
                             </View>
-                          </View>
-                          <View style={styles.checkmarkContainer}>
-                            {isSelected && (
-                              <Animated.View 
-                                style={styles.checkmark}
-                                entering={FadeIn.duration(200)}
-                                exiting={FadeOut.duration(200)}
-                              >
-                                <Check size={20} color="#14b8a6" />
-                              </Animated.View>
-                            )}
-                          </View>
+                          )}
                         </View>
-                      </Animated.View>
-                    </Pressable>
-                  );
-                })
-              )}
-            </ScrollView>
+                      </View>
+                      <View style={styles.checkmarkContainer}>
+                        {isSelected && (
+                          <Animated.View 
+                            style={styles.checkmark}
+                            entering={FadeIn.duration(200)}
+                            exiting={FadeOut.duration(200)}
+                          >
+                            <Check size={20} color="#14b8a6" />
+                          </Animated.View>
+                        )}
+                      </View>
+                    </View>
+                  </Animated.View>
+                </Pressable>
+              );
+            })
+          )}
+        </ScrollView>
 
-            <View style={styles.bottomBar}>
-              <Pressable 
-                style={[
-                  styles.addButton,
-                  selectedWorkouts.length === 0 && styles.addButtonDisabled
-                ]}
-                onPress={handleConfirm}
-                disabled={selectedWorkouts.length === 0}
-              >
-                <Text style={[
-                  styles.addButtonText,
-                  selectedWorkouts.length === 0 && styles.addButtonTextDisabled
-                ]}>
-                  Add {selectedWorkouts.length} Workout{selectedWorkouts.length !== 1 ? 's' : ''}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+        <View style={styles.bottomBar}>
+          <Pressable 
+            style={[
+              styles.addButton,
+              selectedWorkouts.length === 0 && styles.addButtonDisabled
+            ]}
+            onPress={handleConfirm}
+            disabled={selectedWorkouts.length === 0}
+          >
+            <Text style={[
+              styles.addButtonText,
+              selectedWorkouts.length === 0 && styles.addButtonTextDisabled
+            ]}>
+              Add {selectedWorkouts.length} Workout{selectedWorkouts.length !== 1 ? 's' : ''}
+            </Text>
+          </Pressable>
         </View>
       </View>
-    </Modal>
+    </View>
+  );
+
+  // iOS uses the standard Modal
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        onRequestClose={onClose}
+        animationType="fade"
+      >
+        <View style={styles.iosOverlay}> 
+          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          {renderContent()}
+        </View>
+      </Modal>
+    );
+  }
+
+  // Android renders a View simulating a modal overlay
+  if (!visible) {
+    return null; // Don't render anything if not visible
+  }
+
+  return (
+    <View style={styles.androidFakeModalWrapper}>
+      {/* Backdrop for Android fake modal */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Centering container for Android */}
+      <View style={styles.androidCenteringContainer}>
+         {renderContent()}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  // --- iOS Specific Styles --- 
+  iosOverlay: { // Overlay for iOS Modal
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
+    justifyContent: 'flex-end', // Aligned to bottom
+    alignItems: 'center',
   },
-  backdrop: {
+  backdrop: { // Used by both, but context differs
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(2, 26, 25, 0.8)',
   },
-  modalContainer: {
+
+  // --- Android Specific Styles ---
+  androidFakeModalWrapper: { // Covers the whole screen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000, // High zIndex to be on top
+  },
+  androidCenteringContainer: { // Centers the modal content within the wrapper
+    flex: 1,
+    justifyContent: 'flex-end', // Aligned to bottom
+    alignItems: 'center',
+  },
+
+  // --- Common Styles --- 
+  modalContainer: { // The visible modal box
     backgroundColor: '#031A19',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    height: '90%',
+    height: '90%', 
+    width: '100%', 
     overflow: 'hidden',
   },
   modalContent: {
@@ -444,7 +487,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   searchInputWeb: {
-    outlineStyle: 'none',
+    // outlineStyle: 'none', // Removed - Invalid RN property
   },
   muscleGroupsScroll: {
     maxHeight: 40,

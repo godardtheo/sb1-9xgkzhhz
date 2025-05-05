@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import WeightProgressionChartCard from '@/components/WeightProgressionChartCard';
 import RecentEntriesCard from '@/components/RecentEntriesCard';
 import BodyWeightModal, { BodyWeightModalMode } from '@/components/BodyWeightModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface WeightData {
   date: string;
@@ -40,6 +41,9 @@ export default function BodyWeightPage() {
   const [bodyWeightModalVisible, setBodyWeightModalVisible] = useState(false);
   const [bodyWeightModalMode, setBodyWeightModalMode] = useState<BodyWeightModalMode>(BodyWeightModalMode.NEW);
   const [initialModalValue, setInitialModalValue] = useState<number | null>(null);
+  
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
 
   // Set up AppState listener
   useEffect(() => {
@@ -206,7 +210,7 @@ export default function BodyWeightPage() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Link href="../" asChild>
           <TouchableOpacity style={styles.backButton}>
             <Ionicons name="close" size={24} color="#ffffff" />
@@ -390,7 +394,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    paddingTop: 24,
     paddingBottom: 8,
     backgroundColor: '#042f2e',
     borderBottomWidth: 1,

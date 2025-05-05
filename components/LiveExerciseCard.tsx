@@ -6,6 +6,7 @@ import {
   TextInput,
   Platform,
   Dimensions,
+  LayoutChangeEvent,
 } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -14,6 +15,7 @@ import Animated, {
   withSpring,
   withTiming,
   runOnJS,
+  Layout,
 } from 'react-native-reanimated';
 import {
   Trash2,
@@ -21,6 +23,7 @@ import {
   ArrowUp,
   ArrowDown,
   CircleMinus,
+  Plus,
 } from 'lucide-react-native';
 import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Checkbox } from './Checkbox';
@@ -32,7 +35,7 @@ type Exercise = {
   name: string;
   muscle_primary?: string[];
   muscle_secondary?: string[];
-  equipment?: string[];
+  equipment?: string | string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -66,146 +69,12 @@ type Props = {
   isInWorkout?: boolean;
 };
 
-const SPRING_CONFIG = {
-  damping: 18,
-  stiffness: 180,
-  mass: 0.5,
-  overshootClamping: false,
-  restDisplacementThreshold: 0.01,
-  restSpeedThreshold: 2,
-};
-
 const LiveExerciseCard = forwardRef<
-  { animateMove: (direction: -1 | 1, distance: number) => void },
+  {},
   Props
 >(({ exercise, index, onRemove, onSetUpdate, onAddSet, onRemoveSet, onInfo, onMoveUp, onMoveDown, totalExercises, isInWorkout = false }, ref) => {
-  // Local animated values
-  const isDragging = useSharedValue(false);
-  const isMoving = useSharedValue(false);
-  const offsetY = useSharedValue(0);
-  const directionAnim = useSharedValue(0); // -1 pour up, 1 pour down
-  const dragY = useSharedValue(0);
-  const startY = useSharedValue(0);
-  const scale = useSharedValue(1);
-  const zIndex = useSharedValue(1);
-  const opacity = useSharedValue(1);
   const [measurements, setMeasurements] = useState({ height: 0, y: 0 });
-  const scrollOffset = useSharedValue(0);
   const screenHeight = height;
-
-  // For tracking auto-scrolling
-  const isScrolling = useSharedValue(false);
-  const scrollDirection = useSharedValue(0); // -1 for up, 1 for down, 0 for none
-  const scrollTimer = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    return () => {
-      // Clean up timer on unmount
-      if (scrollTimer.current) {
-        clearInterval(scrollTimer.current);
-      }
-    };
-  }, []);
-
-  // Create pan gesture for dragging, if reordering is enabled
-  const dragGesture = Gesture.Pan()
-    .activateAfterLongPress(200)
-    .onStart(event => {
-      isDragging.value = true;
-      scale.value = withSpring(1.03, SPRING_CONFIG);
-      opacity.value = withTiming(0.9);
-      zIndex.value = 1000;
-      startY.value = measurements.y;
-    })
-    .onUpdate(event => {
-      if (!isDragging.value) return;
-      
-      dragY.value = event.translationY;
-      
-      // Check if we need to auto-scroll
-      const touchY = event.absoluteY;
-      const SCROLL_THRESHOLD = 120; // pixels from edge to start scrolling
-      
-      if (touchY < SCROLL_THRESHOLD) {
-        // Near top edge, scroll up
-        scrollDirection.value = -1;
-        if (!isScrolling.value) {
-          isScrolling.value = true;
-          if (scrollTimer.current) clearInterval(scrollTimer.current);
-          scrollTimer.current = setInterval(() => {
-            // This would need to communicate with the parent component
-            // We can only signal intent here
-            const intensity = Math.max(0, 1 - touchY / SCROLL_THRESHOLD);
-            console.log('Should scroll up', intensity);
-          }, 16);
-        }
-      } else if (touchY > screenHeight - SCROLL_THRESHOLD) {
-        // Near bottom edge, scroll down
-        scrollDirection.value = 1;
-        if (!isScrolling.value) {
-          isScrolling.value = true;
-          if (scrollTimer.current) clearInterval(scrollTimer.current);
-          scrollTimer.current = setInterval(() => {
-            const intensity = Math.max(0, 1 - (screenHeight - touchY) / SCROLL_THRESHOLD);
-            console.log('Should scroll down', intensity);
-          }, 16);
-        }
-      } else {
-        // Not near edges, cancel auto-scrolling
-        if (isScrolling.value) {
-          isScrolling.value = false;
-          scrollDirection.value = 0;
-          if (scrollTimer.current) {
-            clearInterval(scrollTimer.current);
-            scrollTimer.current = null;
-          }
-        }
-      }
-    })
-    .onEnd(event => {
-      if (!isDragging.value) return;
-
-      // Stop any auto-scrolling
-      if (scrollTimer.current) {
-        clearInterval(scrollTimer.current);
-        scrollTimer.current = null;
-      }
-      isScrolling.value = false;
-      scrollDirection.value = 0;
-
-      // Calculate new index based on position
-      const newIndex = Math.round(
-        (startY.value + dragY.value) / measurements.height
-      );
-      if (newIndex !== index && newIndex >= 0) {
-        if (typeof onMoveUp === 'function') {
-          onMoveUp(index);
-        }
-      }
-
-      // Reset animations
-      scale.value = withSpring(1, SPRING_CONFIG);
-      opacity.value = withTiming(1);
-      zIndex.value = withTiming(1);
-      isDragging.value = false;
-      dragY.value = withSpring(0, SPRING_CONFIG);
-    })
-    .onFinalize(() => {
-      // Reset animations and clean up
-      scale.value = withSpring(1, SPRING_CONFIG);
-      opacity.value = withTiming(1);
-      zIndex.value = withTiming(1);
-      isDragging.value = false;
-      dragY.value = withSpring(0, SPRING_CONFIG);
-      
-      // Ensure auto-scrolling is stopped
-      if (scrollTimer.current) {
-        clearInterval(scrollTimer.current);
-        scrollTimer.current = null;
-      }
-      isScrolling.value = false;
-      scrollDirection.value = 0;
-    });
 
   // For text input values
   const handleInputChange = (
@@ -258,76 +127,10 @@ const LiveExerciseCard = forwardRef<
     return string.charAt(0).toUpperCase() + string.slice(1).replace('_', ' ');
   };
 
-  // Méthode pour animer le déplacement (comme DraggableExerciseCard)
-  const animateMove = (dir: -1 | 1, distance: number) => {
-    directionAnim.value = dir;
-    offsetY.value = distance;
-    isMoving.value = true;
-    setTimeout(() => {
-      isMoving.value = false;
-      offsetY.value = 0;
-    }, 250);
-  };
-
-  useImperativeHandle(ref, () => ({
-    animateMove
-  }));
-
-  // Animated styles
-  const animatedStyle = useAnimatedStyle(() => {
-    if (isMoving.value) {
-      return {
-        zIndex: 20,
-        transform: [
-          { translateY: withSpring(directionAnim.value * offsetY.value, SPRING_CONFIG) },
-          { scale: withSpring(1.02, SPRING_CONFIG) },
-        ],
-        shadowColor: '#0e7490',
-        shadowOpacity: withTiming(0.25, { duration: 150 }),
-        shadowRadius: withTiming(10, { duration: 150 }),
-        elevation: 10,
-      };
-    }
-    if (isDragging.value) {
-      return {
-        zIndex: 20,
-        transform: [
-          { translateY: dragY.value },
-          { scale: withSpring(1.02, SPRING_CONFIG) },
-        ],
-        shadowColor: '#0e7490',
-        shadowOpacity: withTiming(0.25, { duration: 150 }),
-        shadowRadius: withTiming(10, { duration: 150 }),
-        elevation: 10,
-      };
-    }
-    return {
-      transform: [{ translateY: withSpring(0, SPRING_CONFIG) }, { scale: 1 }],
-      zIndex: 1,
-      opacity: 1,
-    };
-  });
-
-  // Animation de la couleur de fond (identique à DraggableExerciseCard)
-  const backgroundStyle = useAnimatedStyle(() => {
-    return {
-      backgroundColor: withTiming(
-        isMoving.value ? '#179186' : '#115e59',
-        { duration: isMoving.value ? 150 : 120 }
-      ),
-    };
-  });
-
-  // Function to measure component position
-  const onLayout = (event: any) => {
-    const { height, y } = event.nativeEvent.layout;
-    setMeasurements({ height, y });
-  };
-
   return (
     <Animated.View
-      style={[styles.container as any, backgroundStyle, animatedStyle]}
-      onLayout={onLayout}
+      layout={Layout.springify().damping(18).stiffness(180)}
+      style={[styles.container as any]}
     >
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseInfo}>
@@ -476,7 +279,7 @@ const LiveExerciseCard = forwardRef<
             style={styles.setActionButton}
             onPress={() => onAddSet(exercise.id)}
           >
-            <ArrowUp size={16} color="#5eead4" />
+            <Plus size={16} color="#5eead4" />
             <Text style={styles.setActionText}>Add Set</Text>
           </Pressable>
 
@@ -485,7 +288,7 @@ const LiveExerciseCard = forwardRef<
               style={styles.setActionButton}
               onPress={() => onRemoveSet(exercise.id)}
             >
-              <ArrowDown size={16} color="#5eead4" />
+              <CircleMinus size={16} color="#5eead4" />
               <Text style={styles.setActionText}>Remove Set</Text>
             </Pressable>
           )}
@@ -523,12 +326,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
     position: 'relative',
-    ...(Platform.OS === 'web' ? {
-      // @ts-ignore
-      cursor: 'default',
-      // @ts-ignore
-      userSelect: 'none',
-    } : {}),
   },
   exerciseHeader: {
     flexDirection: 'row',
@@ -660,11 +457,6 @@ const styles = StyleSheet.create({
     color: '#ccfbf1',
     textAlign: 'center',
     padding: 0,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
   },
   completedInput: {
     backgroundColor: '#134e4a',
@@ -674,10 +466,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   setActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
+    flexShrink: 1,
+    flexWrap: 'nowrap',
   },
   setActionButton: {
     flexDirection: 'row',
@@ -686,19 +483,31 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
+    ...Platform.select({
+      android: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+      }
+    })
   },
   setActionText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#5eead4',
     marginLeft: 8,
+    ...Platform.select({
+      android: {
+        fontSize: 12,
+        fontFamily: 'Inter-Regular',
+        marginLeft: 6,
+      }
+    })
   },
   reorderButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 8,
+    gap: 6,
   },
   arrowButton: {
     width: 40,
@@ -708,6 +517,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 0,
+    ...Platform.select({
+      android: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+      }
+    })
   },
 });
 

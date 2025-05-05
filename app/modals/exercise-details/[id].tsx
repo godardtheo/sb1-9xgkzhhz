@@ -5,6 +5,7 @@ import { Heart, ArrowLeft } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { WebView } from 'react-native-webview';
 import HistoryDoneExercise from '@/components/HistoryDoneExercise';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type ExerciseSet = {
   set_number: number;
@@ -30,6 +31,9 @@ export default function ExerciseDetailsScreen() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [weightUnit, setWeightUnit] = useState<string>('kg'); // Default to kg
   
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
+
   // Protection contre les rendus multiples
   const isDataFetched = React.useRef(false);
 
@@ -38,41 +42,34 @@ export default function ExerciseDetailsScreen() {
 
   // Stocker les paramètres de retour au premier rendu
   useEffect(() => {
-    console.log('[ExerciseDetails] Return params effect run');
     if (params.template_id) {
-      console.log('[ExerciseDetails] Saving template_id:', params.template_id);
       returnParams.current.template_id = params.template_id as string;
     }
   }, [params]);
 
   // Fetch exercise details on mount
   useEffect(() => {
-    console.log('[ExerciseDetails] Main fetch effect run. isDataFetched.current:', isDataFetched.current, 'ID:', id);
-    if (!isDataFetched.current && id) { // Ensure id exists too
-      console.log('[ExerciseDetails] Conditions met, initiating fetches.');
+    if (!isDataFetched.current && id) {
       fetchUserWeightUnit();
       fetchExerciseDetails();
       isDataFetched.current = true;
-      console.log('[ExerciseDetails] isDataFetched set to true.');
-    } else {
-      console.log('[ExerciseDetails] Conditions not met, skipping fetches.');
     }
+    
+    // Ajouter une fonction de nettoyage pour logger le démontage
+    return () => {
+    };
   }, [id]); // Keep dependency only on id
 
   // Fetch user's weight unit preference
   const fetchUserWeightUnit = async () => {
-    console.log('[ExerciseDetails] fetchUserWeightUnit START');
     try {
-      console.log('[ExerciseDetails] fetchUserWeightUnit: Getting user...');
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
         console.error('[ExerciseDetails] fetchUserWeightUnit: No authenticated user found');
         return;
       }
-      console.log('[ExerciseDetails] fetchUserWeightUnit: User found, ID:', user.id);
 
-      console.log('[ExerciseDetails] fetchUserWeightUnit: Fetching weight unit from users table...');
       const { data, error } = await supabase
         .from('users')
         .select('weight_unit')
@@ -85,29 +82,21 @@ export default function ExerciseDetailsScreen() {
       }
 
       if (data && data.weight_unit) {
-        console.log('[ExerciseDetails] fetchUserWeightUnit: Weight unit found:', data.weight_unit);
         setWeightUnit(data.weight_unit);
       } else {
         console.log('[ExerciseDetails] fetchUserWeightUnit: No weight unit found in profile, using default.');
       }
-      console.log('[ExerciseDetails] fetchUserWeightUnit SUCCESS');
     } catch (error) {
       console.error('[ExerciseDetails] fetchUserWeightUnit: CATCH block error:', error);
-    } finally {
-      console.log('[ExerciseDetails] fetchUserWeightUnit FINALLY');
     }
   };
 
   const fetchExerciseDetails = async () => {
     if (!id) {
-      console.log('[ExerciseDetails] fetchExerciseDetails: Aborted, no ID.');
       return;
     }
-    console.log('[ExerciseDetails] fetchExerciseDetails START for ID:', id);
     setLoading(true);
-    console.log('[ExerciseDetails] fetchExerciseDetails: setLoading(true)');
     try {
-      console.log('[ExerciseDetails] fetchExerciseDetails: Getting user...');
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -115,9 +104,7 @@ export default function ExerciseDetailsScreen() {
         setLoading(false); // Ensure loading stops
         return;
       }
-      console.log('[ExerciseDetails] fetchExerciseDetails: User found, ID:', user.id);
 
-      console.log('[ExerciseDetails] fetchExerciseDetails: Fetching exercise details from exercises table...');
       const { data: exerciseData, error } = await supabase
         .from('exercises')
         .select('*')
@@ -129,9 +116,7 @@ export default function ExerciseDetailsScreen() {
         setLoading(false); // Ensure loading stops
         return;
       }
-      console.log('[ExerciseDetails] fetchExerciseDetails: Exercise data fetched:', exerciseData ? 'OK' : 'NULL');
 
-      console.log('[ExerciseDetails] fetchExerciseDetails: Checking favorite status...');
       const { data: favoriteData, error: favoriteError } = await supabase
         .from('user_favorite_exercises')
         .select('*')
@@ -140,25 +125,17 @@ export default function ExerciseDetailsScreen() {
         .maybeSingle();
       
       if (favoriteError) {
-        // Log as warning, might not be critical
         console.warn('[ExerciseDetails] fetchExerciseDetails: Error checking favorite status:', JSON.stringify(favoriteError, null, 2));
       }
-      console.log('[ExerciseDetails] fetchExerciseDetails: Favorite status checked. Is favorite:', !!favoriteData);
 
-      console.log('[ExerciseDetails] fetchExerciseDetails: Calling setExercise and setFavorite...');
       setExercise(exerciseData);
       setFavorite(!!favoriteData);
-      console.log('[ExerciseDetails] fetchExerciseDetails: State updated for exercise and favorite.');
       
-      console.log('[ExerciseDetails] fetchExerciseDetails: Calling fetchExerciseHistory...');
       await fetchExerciseHistory(String(id)); // Ensure this completes before setting loading false
-      console.log('[ExerciseDetails] fetchExerciseDetails: fetchExerciseHistory call finished.');
 
-      console.log('[ExerciseDetails] fetchExerciseDetails SUCCESS (end of try block)');
     } catch (error) {
       console.error('[ExerciseDetails] fetchExerciseDetails: CATCH block error:', error);
     } finally {
-      console.log('[ExerciseDetails] fetchExerciseDetails: FINALLY block reached. Setting loading to false.');
       setLoading(false);
     }
   };
@@ -166,14 +143,10 @@ export default function ExerciseDetailsScreen() {
   // Fetch exercise's history in past workouts
   const fetchExerciseHistory = async (exerciseId: string) => {
     if (!exerciseId) {
-      console.log('[ExerciseDetails] fetchExerciseHistory: Aborted, no exerciseId.');
       return;
     }
-    console.log('[ExerciseDetails] fetchExerciseHistory START for exerciseId:', exerciseId);
     setHistoryLoading(true);
-    console.log('[ExerciseDetails] fetchExerciseHistory: setHistoryLoading(true)');
     try {
-      console.log('[ExerciseDetails] fetchExerciseHistory: Getting user...');
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -181,9 +154,7 @@ export default function ExerciseDetailsScreen() {
         setHistoryLoading(false); // Ensure loading stops
         return;
       }
-      console.log('[ExerciseDetails] fetchExerciseHistory: User found, ID:', user.id);
 
-      console.log('[ExerciseDetails] fetchExerciseHistory: Fetching workout_exercises...');
       const { data, error } = await supabase
         .from('workout_exercises')
         .select(`
@@ -200,19 +171,15 @@ export default function ExerciseDetailsScreen() {
         setHistoryLoading(false); // Ensure loading stops
         return;
       }
-      console.log(`[ExerciseDetails] fetchExerciseHistory: Found ${data?.length || 0} workout_exercises entries.`);
 
       const historyItems: ExerciseHistory[] = [];
-      console.log('[ExerciseDetails] fetchExerciseHistory: Starting loop to fetch sets...');
       for (const item of data || []) {
-        console.log(`[ExerciseDetails] fetchExerciseHistory: Processing workout_exercise ID: ${item.id}, parent_workout_id: ${item.parent_workout_id}`);
         if (!item.workouts) {
             console.warn(`[ExerciseDetails] fetchExerciseHistory: Skipping item ${item.id} due to missing workout data.`);
             continue;
         }
         
         const workout = item.workouts as any;
-        console.log(`[ExerciseDetails] fetchExerciseHistory: Fetching sets for workout_exercise ID: ${item.id}...`);
         const { data: sets, error: setsError } = await supabase
           .from('sets')
           .select('*')
@@ -223,10 +190,8 @@ export default function ExerciseDetailsScreen() {
           console.error(`[ExerciseDetails] fetchExerciseHistory: Error fetching sets for item ${item.id}:`, JSON.stringify(setsError, null, 2));
           continue; // Continue to next item if sets fail
         }
-        console.log(`[ExerciseDetails] fetchExerciseHistory: Found ${sets?.length || 0} sets for item ${item.id}.`);
 
         if (sets && sets.length > 0) {
-          console.log(`[ExerciseDetails] fetchExerciseHistory: Pushing history item for workout: ${workout.name}`);
           historyItems.push({
             workout_id: item.parent_workout_id,
             workout_name: workout.name || 'Unknown Workout',
@@ -239,16 +204,11 @@ export default function ExerciseDetailsScreen() {
           });
         }
       }
-      console.log('[ExerciseDetails] fetchExerciseHistory: Loop finished. Total history items found:', historyItems.length);
 
-      console.log('[ExerciseDetails] fetchExerciseHistory: Calling setHistory...');
       setHistory(historyItems);
-      console.log('[ExerciseDetails] fetchExerciseHistory: State updated for history.');
-      console.log('[ExerciseDetails] fetchExerciseHistory SUCCESS (end of try block)');
     } catch (error) {
       console.error('[ExerciseDetails] fetchExerciseHistory: CATCH block error:', error);
     } finally {
-      console.log('[ExerciseDetails] fetchExerciseHistory: FINALLY block reached. Setting historyLoading to false.');
       setHistoryLoading(false);
     }
   };
@@ -335,16 +295,18 @@ export default function ExerciseDetailsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Disable native header entirely */}
+      {/* Modifier la présentation pour iOS */}
       <Stack.Screen 
         options={{ 
           headerShown: false,
-          presentation: 'modal', // Keep modal presentation style
+          // Utiliser 'card' sur iOS pour éviter le problème de re-montage,
+          // garder 'modal' (ou le défaut) sur les autres plateformes.
+          presentation: Platform.OS === 'ios' ? 'card' : 'modal', 
         }} 
       />
 
       {/* Custom Header Implementation */}
-      <View style={styles.customHeader}>
+      <View style={[styles.customHeader, { paddingTop: Platform.OS === 'android' ? insets.top + 12 : 24 }]}>
         <Pressable onPress={handleBack} style={styles.headerButtonCustomBack}>
           <ArrowLeft size={24} color="#5eead4" />
         </Pressable>
@@ -479,33 +441,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 24, // Adjust top padding for status bar etc.
     paddingBottom: 12,
     backgroundColor: '#042f2e', // Match previous header background
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(94, 234, 212, 0.1)', // Match previous border
   },
   headerButtonCustomBack: {
-    padding: 8, // Keep padding for touch area
-    position: 'absolute', // Position absolutely to allow title centering
-    left: 16,
-    bottom: 12, // Align with title bottom padding
-    zIndex: 1, // Ensure it's clickable
+    padding: 8, // Garder le padding pour la zone tactile
   },
   customHeaderTitle: {
-    flex: 1, // Allow title to take space but be centered
+    flex: 1, // Permet au titre de prendre l'espace et d'être centré
     textAlign: 'center',
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#ccfbf1',
-    marginHorizontal: 50, // Ensure title doesn't overlap absolute positioned buttons
+    marginHorizontal: 8, // Réduit un peu pour laisser plus de place si besoin
   },
   headerButtonCustomFavorite: {
-    padding: 8, // Keep padding for touch area
-    position: 'absolute', // Position absolutely
-    right: 16,
-    bottom: 12, // Align with title bottom padding
-    zIndex: 1, // Ensure it's clickable
+    padding: 8, // Garder le padding pour la zone tactile
   },
   content: {
     flex: 1,

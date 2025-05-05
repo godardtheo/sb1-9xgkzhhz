@@ -4,6 +4,7 @@ import { Search, ArrowLeft, X, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useProgramStore } from '@/lib/store/programStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Program = {
   id: string;
@@ -21,6 +22,8 @@ export default function ProgramsScreen() {
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const { programs, loading, error, fetchPrograms, needsRefresh } = useProgramStore();
   const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
+  
+  const insets = useSafeAreaInsets();
 
   const muscleGroups = [
     'chest', 'back', 'shoulders', 'legs', 'core', 'biceps', 'triceps'
@@ -73,7 +76,7 @@ export default function ProgramsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <View style={styles.headerTop}>
           <Pressable 
             onPress={() => router.back()}
@@ -166,7 +169,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#021a19',
   },
   header: {
-    paddingTop: 24,
     paddingHorizontal: 24,
     backgroundColor: '#021a19',
     borderBottomWidth: 1,
@@ -293,11 +295,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
     textAlign: 'center',
-  },
-  statusText: {
-    color: '#5eead4',
-    textAlign: 'center',
-    fontFamily: 'Inter-Regular',
   },
   errorText: {
     color: '#ef4444',

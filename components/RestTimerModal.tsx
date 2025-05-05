@@ -64,6 +64,7 @@ export default function RestTimerModal({
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View
           style={[styles.modalContainer, animatedStyle]}
         >
@@ -117,6 +118,7 @@ export default function RestTimerModal({
             ))}
           </View>
         </Animated.View>
+        </View>
       </View>
     </Modal>
   );

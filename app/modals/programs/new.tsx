@@ -7,12 +7,10 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
 import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import DraggableWorkoutCard from '@/components/DraggableWorkoutCard';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
-import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
-import { Workout as ModalWorkout } from '@/components/WorkoutSelectionModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Define the structure for muscle counts
 type MuscleCount = {
@@ -23,14 +21,15 @@ type MuscleCount = {
 // Use the imported ModalWorkout type directly if SelectedWorkout becomes identical
 // Update: Let's define SelectedWorkout explicitly to include musclesWithCounts
 type SelectedWorkout = {
-  id: string; // template_id
+  id: string;
   name: string;
   description: string | null;
-  muscles: string[]; // Basic list
-  musclesWithCounts: MuscleCount[]; // Sorted list with counts
+  muscles: string[];
+  musclesWithCounts: MuscleCount[]; 
   estimated_duration: string;
-  exercise_count?: number; 
-  set_count?: number; 
+  exercise_count: number;
+  set_count: number;
+  template_id?: string;
 };
 
 export default function NewProgramScreen() {
@@ -45,31 +44,13 @@ export default function NewProgramScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [selectedWorkouts, setSelectedWorkouts] = useState<SelectedWorkout[]>([]);
+  const [workouts, setWorkouts] = useState<SelectedWorkout[]>([]);
   const [shouldCheckActive, setShouldCheckActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const { setNeedsRefresh, getActiveProgram } = useProgramStore();
-  const workoutRefs = useRef<Array<{ animateMove: (direction: -1 | 1, distance: number) => void }>>([]);
-  const [itemHeights, setItemHeights] = useState<number[]>([]);
-  const [isReordering, setIsReordering] = useState(false);
-
-  const {
-    workouts: reorderedWorkouts,
-    setWorkouts: setReorderedWorkouts,
-    activeIndex,
-    itemOffsets,
-    itemTranslations,
-    updateItemHeight,
-    handleDragActive,
-    handleDragEnd,
-  } = useWorkoutReorder(selectedWorkouts as any);
-
-  // Keep selectedWorkouts and reorderedWorkouts in sync
-  useEffect(() => {
-    if (selectedWorkouts && selectedWorkouts.length > 0) {
-      setReorderedWorkouts(selectedWorkouts);
-    }
-  }, [selectedWorkouts]);
+  
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
 
   // Handle active toggle changes
   const handleActiveToggle = (value: boolean) => {
@@ -94,9 +75,9 @@ export default function NewProgramScreen() {
     return true; // Proceed with save
   };
 
-  const totalWorkouts = selectedWorkouts.length;
-  const totalSets = selectedWorkouts.reduce((acc, workout) => acc + (workout.exercise_count || 0 * 4), 0);
-  const totalMinutes = selectedWorkouts.reduce((acc, workout) => {
+  const totalWorkouts = workouts.length;
+  const totalSets = workouts.reduce((acc, workout) => acc + (workout.set_count || 0), 0);
+  const totalMinutes = workouts.reduce((acc, workout) => {
     return acc + parseDurationToMinutes(workout.estimated_duration);
   }, 0);
   const formattedDuration = formatDuration(totalMinutes);
@@ -108,7 +89,7 @@ export default function NewProgramScreen() {
         return;
       }
 
-      if (selectedWorkouts.length === 0) {
+      if (workouts.length === 0) {
         setError('Add at least one workout to the program');
         return;
       }
@@ -135,7 +116,7 @@ export default function NewProgramScreen() {
           user_id: user.id,
           name: name.trim(),
           description: description.trim() || null,
-          weekly_workouts: selectedWorkouts.length,
+          weekly_workouts: workouts.length,
           is_active: isActive,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -157,10 +138,10 @@ export default function NewProgramScreen() {
         if (deactivateError) throw deactivateError;
       }
 
-      // Add workouts to program using the reordered list to preserve order
-      const workoutsToAdd = reorderedWorkouts.map((workout: SelectedWorkout, index: number) => ({
+      // Add workouts to program using the state `workouts` list to preserve order
+      const workoutsToAdd = workouts.map((workout: SelectedWorkout, index: number) => ({
         program_id: program.id,
-        template_id: workout.id,
+        template_id: workout.template_id || workout.id,
         name: workout.name,
         description: workout.description,
         muscles: workout.muscles,
@@ -201,10 +182,10 @@ export default function NewProgramScreen() {
   };
 
   const removeWorkout = (workoutId: string) => {
-    setSelectedWorkouts(prev => prev.filter(w => w.id !== workoutId));
+    setWorkouts(prev => prev.filter(w => w.id !== workoutId));
   };
 
-  const handleWorkoutSelection = async (selectedTemplates: ModalWorkout[]) => {
+  const handleWorkoutSelection = async (selectedTemplates: SelectedWorkout[]) => {
     setShowWorkoutSelection(false);
     setLoading(true);
     try {
@@ -288,7 +269,7 @@ export default function NewProgramScreen() {
 
       // Filter out nulls and use the fully detailed workouts
       const validDetailedWorkouts = detailedWorkouts.filter(w => w !== null) as SelectedWorkout[];
-      setSelectedWorkouts(prev => [...prev, ...validDetailedWorkouts]);
+      setWorkouts(prev => [...prev, ...validDetailedWorkouts]);
 
     } catch (err: any) {
       console.error('Error processing selected workouts:', err);
@@ -308,38 +289,30 @@ export default function NewProgramScreen() {
   };
 
   const handleMoveUp = (index: number) => {
-    if (index <= 0 || isReordering) return;
-    setIsReordering(true);
-    workoutRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
-    workoutRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
+    if (index <= 0) return;
     setTimeout(() => {
-      setSelectedWorkouts(prev => {
+      setWorkouts(prev => {
         const newArr = [...prev];
         [newArr[index-1], newArr[index]] = [newArr[index], newArr[index-1]];
         return newArr;
       });
-      setIsReordering(false);
-    }, 150);
+    }, 0);
   };
 
   const handleMoveDown = (index: number) => {
-    if (index >= selectedWorkouts.length - 1 || isReordering) return;
-    setIsReordering(true);
-    workoutRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
-    workoutRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
+    if (index >= workouts.length - 1) return;
     setTimeout(() => {
-      setSelectedWorkouts(prev => {
+      setWorkouts(prev => {
         const newArr = [...prev];
         [newArr[index], newArr[index+1]] = [newArr[index+1], newArr[index]];
         return newArr;
       });
-      setIsReordering(false);
-    }, 150);
+    }, 0);
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable 
           onPress={() => router.back()}
           style={styles.backButton}
@@ -412,54 +385,50 @@ export default function NewProgramScreen() {
         </Pressable>
       </View>
 
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <ScrollView 
-          ref={scrollRef}
-          style={styles.scrollView}
-          contentContainerStyle={styles.workoutsList}
-          showsVerticalScrollIndicator={true}
-        >
-          {selectedWorkouts.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                Add workouts to create your program
-              </Text>
-              <Pressable 
-                style={styles.addWorkoutButton}
-                onPress={() => setShowWorkoutSelection(true)}
-              >
-                <Plus size={20} color="#ccfbf1" />
-                <Text style={styles.addWorkoutText}>Add Workout</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <>
-              {selectedWorkouts.map((workout, index) => (
-                <DraggableWorkoutCard
-                  key={workout.id}
-                  ref={el => { if (el) workoutRefs.current[index] = el; }}
-                  workout={workout}
-                  index={index}
-                  totalWorkouts={selectedWorkouts.length}
-                  onMoveUp={handleMoveUp}
-                  onMoveDown={handleMoveDown}
-                  onRemove={removeWorkout}
-                  onPress={() => router.push(`/modals/workouts/${workout.id}`)}
-                  onInfo={() => handleWorkoutInfo(workout)}
-                  onLayout={(event: LayoutChangeEvent) => updateItemHeight(index, event.nativeEvent.layout.height)}
-                />
-              ))}
-              <Pressable 
-                style={styles.addWorkoutButton}
-                onPress={() => setShowWorkoutSelection(true)}
-              >
-                <Plus size={20} color="#ccfbf1" />
-                <Text style={styles.addWorkoutText}>Add Workout</Text>
-              </Pressable>
-            </>
-          )}
-        </ScrollView>
-      </GestureHandlerRootView>
+      <ScrollView 
+        ref={scrollRef}
+        style={styles.scrollView}
+        contentContainerStyle={styles.workoutsList}
+        showsVerticalScrollIndicator={true}
+      >
+        {workouts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Add workouts to create your program
+            </Text>
+            <Pressable 
+              style={styles.addWorkoutButton}
+              onPress={() => setShowWorkoutSelection(true)}
+            >
+              <Plus size={20} color="#ccfbf1" />
+              <Text style={styles.addWorkoutText}>Add Workout</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            {workouts.map((workout: SelectedWorkout, index: number) => (
+              <DraggableWorkoutCard
+                key={workout.id}
+                workout={workout}
+                index={index}
+                totalWorkouts={workouts.length}
+                onMoveUp={handleMoveUp}
+                onMoveDown={handleMoveDown}
+                onRemove={() => removeWorkout(workout.id)}
+                onPress={() => router.push(`/modals/workouts/${workout.template_id}`)}
+                onInfo={() => handleWorkoutInfo(workout)}
+              />
+            ))}
+            <Pressable 
+              style={styles.addWorkoutButton}
+              onPress={() => setShowWorkoutSelection(true)}
+            >
+              <Plus size={20} color="#ccfbf1" />
+              <Text style={styles.addWorkoutText}>Add Workout</Text>
+            </Pressable>
+          </>
+        )}
+      </ScrollView>
 
       {error && (
         <Animated.View 
@@ -479,7 +448,7 @@ export default function NewProgramScreen() {
         </Animated.View>
       )}
 
-      {selectedWorkouts.length > 0 && (
+      {workouts.length > 0 && (
         <View style={styles.bottomButtonContainer}>
           <Pressable 
             style={[styles.saveButton, loading && styles.saveButtonDisabled]}
@@ -538,7 +507,6 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 24,
-    paddingTop: Platform.OS === 'web' ? 40 : 24,
     backgroundColor: '#021a19',
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',

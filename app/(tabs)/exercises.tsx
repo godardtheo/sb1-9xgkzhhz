@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator, RefreshControl, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator, RefreshControl, FlatList, Platform } from 'react-native';
 import { Search, Plus } from 'lucide-react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
@@ -30,10 +30,11 @@ export default function ExercisesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Hardcoded list of muscle groups from the database enum
+  // Use the more comprehensive list from WorkoutSelectionModal
   const muscleGroups = [
-    'chest', 'back', 'shoulders', 'legs', 'arms', 'core', 'biceps', 
-    'triceps', 'forearms', 'abs', 'obliques', 'quads', 'hamstrings', 
-    'calves', 'glutes', 'full_body'
+    'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
+    'glutes', 'hamstrings', 'lats', 'lower_back', 'quads', 'shoulders', 
+    'triceps', 'upper_back', 'upper_traps'
   ];
 
   useEffect(() => {
@@ -305,12 +306,19 @@ export default function ExercisesScreen() {
               ]}
               onPress={() => handleMuscleSelect(muscle)}
             >
-              <Text style={[
-                styles.muscleGroupText,
-                selectedMuscle === muscle && styles.selectedMuscleGroupText
-              ]}>
-                {muscle.charAt(0).toUpperCase() + muscle.slice(1)}
-              </Text>
+              {(() => {
+                // Format display text: capitalize first letter, replace underscores
+                let displayText = muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ') : '';
+                // Specific overrides if needed (handled by the replace above)
+                return (
+                  <Text style={[
+                    styles.muscleGroupText,
+                    selectedMuscle === muscle && styles.selectedMuscleGroupText
+                  ]}>
+                    {displayText}
+                  </Text>
+                );
+              })()}
             </Pressable>
           ))}
         </ScrollView>
@@ -378,9 +386,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#115e59',
     borderRadius: 12,
-    padding: 12,
+    padding: Platform.OS === 'android' ? 8 : 12,
     marginHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: Platform.OS === 'android' ? 12 : 16,
   },
   searchInput: {
     flex: 1,
@@ -388,13 +396,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#ccfbf1',
+    paddingVertical: Platform.OS === 'android' ? 4 : 0,
   },
   filtersContainer: {
     paddingHorizontal: 24,
-    marginBottom: 8,
+    marginBottom: Platform.OS === 'android' ? 4 : 8,
   },
   muscleGroupsScroll: {
-    marginBottom: 16,
+    marginBottom: Platform.OS === 'android' ? 12 : 16,
   },
   muscleGroupsContent: {
     paddingRight: 16,

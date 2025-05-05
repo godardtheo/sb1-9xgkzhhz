@@ -4,7 +4,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
-  runOnJS,
+  Layout,
 } from 'react-native-reanimated';
 import { Info, Trash2, ArrowUp, ArrowDown, Plus, CircleMinus } from 'lucide-react-native';
 import { useRef, useImperativeHandle, forwardRef } from 'react';
@@ -25,6 +25,12 @@ type Exercise = {
     minReps: string;
     maxReps: string;
   }[];
+  totalExercises: number;
+  onAddSet?: (exerciseId: string) => void;
+  onRemoveSet?: (exerciseId: string) => void;
+  onRepInputChange?: (exerciseId: string, setId: string, type: 'min' | 'max', value: string) => void;
+  onRepInputBlur?: (exerciseId: string, setId: string) => void;
+  scrollRef?: React.RefObject<ScrollView>;
 };
 
 type Props = {
@@ -42,17 +48,8 @@ type Props = {
   scrollRef?: React.RefObject<ScrollView>;
 };
 
-const SPRING_CONFIG = {
-  damping: 18,
-  stiffness: 180,
-  mass: 0.5,
-  overshootClamping: false,
-  restDisplacementThreshold: 0.01,
-  restSpeedThreshold: 2,
-};
-
 const DraggableExerciseCard = forwardRef<
-  { animateMove: (direction: -1 | 1, distance: number) => void },
+  {},
   Props
 >(({
   exercise,
@@ -68,56 +65,6 @@ const DraggableExerciseCard = forwardRef<
   onRepInputBlur,
   scrollRef,
 }, ref) => {
-  // Animation values
-  const isMoving = useSharedValue(false);
-  const offsetY = useSharedValue(0);
-  const direction = useSharedValue(0); // -1 for up, 1 for down
-  
-  // Setup animation method that can be called from parent
-  const animateMove = (dir: -1 | 1, distance: number) => {
-    direction.value = dir;
-    offsetY.value = distance;
-    isMoving.value = true;
-    
-    // Reset after animation
-    setTimeout(() => {
-      isMoving.value = false;
-      offsetY.value = 0;
-    }, 250);
-  };
-  
-  // Expose the animation method to parent
-  useImperativeHandle(ref, () => ({
-    animateMove
-  }));
-  
-  // Create animated styles for movement
-  const animatedStyle = useAnimatedStyle(() => {
-    if (!isMoving.value) return {};
-    
-    return {
-      zIndex: 20,
-      transform: [
-        { translateY: withSpring(direction.value * offsetY.value, SPRING_CONFIG) },
-        { scale: withSpring(1.02, SPRING_CONFIG) },
-      ],
-      shadowColor: '#0e7490',
-      shadowOpacity: withTiming(0.25, { duration: 150 }),
-      shadowRadius: withTiming(10, { duration: 150 }),
-      elevation: 10,
-    };
-  });
-  
-  // Background color animation
-  const backgroundStyle = useAnimatedStyle(() => {
-    return {
-      backgroundColor: withTiming(
-        isMoving.value ? '#179186' : '#115e59',
-        { duration: isMoving.value ? 150 : 120 }
-      ),
-    };
-  });
-  
   // Helper function for formatting muscle names
   const capitalizeFirstLetter = (string: string | undefined | null) => {
     if (!string || typeof string !== 'string') return '';
@@ -126,7 +73,8 @@ const DraggableExerciseCard = forwardRef<
   
   return (
     <Animated.View 
-      style={[styles.container, backgroundStyle, animatedStyle]}
+      layout={Layout.springify().damping(18).stiffness(180)}
+      style={[styles.container]}
     >
       <View style={styles.exerciseHeader}>
         <View style={styles.exerciseInfo}>
@@ -136,7 +84,7 @@ const DraggableExerciseCard = forwardRef<
           {exercise.muscle && (
             <View style={styles.musclesContainer}>
               <View style={styles.primaryMuscleChip}>
-                <Text style={styles.muscleChipText}>
+                <Text style={styles.primaryMuscleChipText}>
                   {capitalizeFirstLetter(exercise.muscle)}
                 </Text>
               </View>
@@ -148,7 +96,7 @@ const DraggableExerciseCard = forwardRef<
             <View style={styles.musclesContainer}>
               {exercise.muscle_primary && exercise.muscle_primary.map((muscle, i) => (
                 <View key={`primary-${i}`} style={styles.primaryMuscleChip}>
-                  <Text style={styles.muscleChipText}>
+                  <Text style={styles.primaryMuscleChipText}>
                     {capitalizeFirstLetter(muscle)}
                   </Text>
                 </View>
@@ -156,7 +104,7 @@ const DraggableExerciseCard = forwardRef<
               
               {exercise.muscle_secondary && exercise.muscle_secondary.map((muscle, i) => (
                 <View key={`secondary-${i}`} style={styles.secondaryMuscleChip}>
-                  <Text style={styles.muscleChipText}>
+                  <Text style={styles.secondaryMuscleChipText}>
                     {capitalizeFirstLetter(muscle)}
                   </Text>
                 </View>
@@ -323,21 +271,26 @@ const styles = StyleSheet.create({
   primaryMuscleChip: {
     backgroundColor: '#0d9488',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 8,
     marginRight: 4,
   },
   secondaryMuscleChip: {
-    backgroundColor: '#0369a1',
+    backgroundColor: '#164e63',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 8,
     marginRight: 4,
   },
-  muscleChipText: {
+  primaryMuscleChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#f0fdfa',
+  },
+  secondaryMuscleChipText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#ccfbf1',
+    color: '#a5f3fc',
   },
   exerciseActions: {
     flexDirection: 'row',
@@ -403,23 +356,25 @@ const styles = StyleSheet.create({
   },
   setActions: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 8,
     marginTop: 16,
   },
   setActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 8,
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 8,
     backgroundColor: '#0d3d56',
   },
   addSetButton: {
-    marginLeft: 'auto',
+    // Supprimer marginLeft: 'auto' pour aligner comme LiveExerciseCard
+    // marginLeft: 'auto',
   },
   setActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
     color: '#5eead4',
   },
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 
 export type CategoryOption = 'all' | 'frequent' | 'favorite' | 'my_exercises';
 
@@ -49,17 +49,17 @@ export default function CategoryFilter({
 const styles = StyleSheet.create({
   container: {
     padding: 0,
-    marginBottom: 16,
+    marginBottom: Platform.OS === 'android' ? 12 : 16,
   },
   filterContainer: {
     flexDirection: 'row',
     backgroundColor: '#0d3d56',
     borderRadius: 12,
-    padding: 4,
+    padding: Platform.OS === 'android' ? 2 : 4,
   },
   filterButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: Platform.OS === 'android' ? 6 : 8,
     paddingHorizontal: 12,
     borderRadius: 8,
   },

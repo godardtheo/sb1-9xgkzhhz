@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useWorkoutStore } from '@/lib/store/workoutStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Workout = {
   id: string;
@@ -22,6 +23,8 @@ export default function WorkoutsScreen() {
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const { workouts, loading, error, fetchWorkouts, needsRefresh } = useWorkoutStore();
   const [filteredWorkouts, setFilteredWorkouts] = useState<Workout[]>([]);
+  
+  const insets = useSafeAreaInsets();
 
   const muscleGroups = [
     'abs', 'adductors', 'biceps', 'calves', 'chest', 'forearms', 'full_body', 
@@ -67,7 +70,7 @@ export default function WorkoutsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <View style={styles.headerTop}>
           <Pressable 
             onPress={() => router.back()}

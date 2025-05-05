@@ -101,22 +101,26 @@ export default function WorkoutDetailsModal({ visible, onClose, workout, isInPro
       }
 
       if (exerciseData && exerciseData.length > 0) {
-        // Format exercises data
-        const exercises = exerciseData.map(item => ({
-          id: item.exercises.id,
-          name: item.exercises.name,
-          muscle: item.exercises.muscle,
-          equipment: item.exercises.equipment,
-          instructions: item.exercises.instructions,
-          video_url: item.exercises.video_url,
-          type: item.exercises.type,
-          difficulty: item.exercises.difficulty,
-          sets: item.template_exercise_sets.map(set => ({
-            id: set.id,
-            minReps: set.min_reps.toString(),
-            maxReps: set.max_reps.toString()
-          }))
-        }));
+        // Format exercises data (Corrected access again)
+        const exercises = exerciseData.map(item => {
+          // Directly access properties from item.exercises, assuming it's the correct object
+          if (!item.exercises) return null; // Handle case where exercise relation might be null
+          return {
+            id: item.exercises.id, // Access directly
+            name: item.exercises.name,
+            muscle: item.exercises.muscle,
+            equipment: item.exercises.equipment,
+            instructions: item.exercises.instructions,
+            video_url: item.exercises.video_url,
+            type: item.exercises.type,
+            difficulty: item.exercises.difficulty,
+            sets: item.template_exercise_sets.map(set => ({
+              id: set.id,
+              minReps: set.min_reps.toString(),
+              maxReps: set.max_reps.toString()
+            }))
+          };
+        }).filter(ex => ex !== null) as Exercise[]; // Filter out nulls and assert type
 
         // Calculate the actual exercise count
         workoutData.exercise_count = exercises.length;
@@ -137,142 +141,173 @@ export default function WorkoutDetailsModal({ visible, onClose, workout, isInPro
     }
   };
 
-  // If workout is null, don't render anything
-  if (!workout) return null;
+  // Common content renderer
+  const renderContent = () => {
+    // If workout is null, don't render anything inside
+    if (!workout) return null;
+    // Use either fetched details or the passed workout prop
+    const displayWorkout = workoutDetails || workout;
+    
+    return (
+      <Animated.View 
+        style={styles.modalContainer}
+        entering={SlideInDown.springify().damping(15)}
+        exiting={SlideOutDown.springify().damping(15)}
+      >
+        <View style={styles.modalContent}>
+          <View style={styles.header}>
+            <Text style={styles.title}>{displayWorkout.name}</Text>
+            <Pressable 
+              onPress={onClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close modal"
+            >
+              <X size={24} color="#5eead4" />
+            </Pressable>
+          </View>
 
-  // Use either fetched details or the passed workout prop
-  const displayWorkout = workoutDetails || workout;
+          <ScrollView 
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            {displayWorkout.description && (
+              <View style={styles.section}>
+                <Text style={styles.description}>{displayWorkout.description}</Text>
+              </View>
+            )}
 
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      onRequestClose={onClose}
-      animationType="fade"
-      aria-modal="true"
-      accessibilityViewIsModal={true}
-    >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <Animated.View 
-          style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.springify().damping(15)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>{displayWorkout.name}</Text>
-              <Pressable 
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityRole="button"
-                accessibilityLabel="Close modal"
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
+            <View style={styles.statsPanel}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{displayWorkout.exercise_count}</Text>
+                <Text style={styles.statLabel}>exercises</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{displayWorkout.set_count || 0}</Text>
+                <Text style={styles.statLabel}>sets</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{formatDuration(parseDurationToMinutes(displayWorkout.estimated_duration))}</Text>
+                <Text style={styles.statLabel}>duration</Text>
+              </View>
             </View>
 
-            <ScrollView 
-              style={styles.content}
-              showsVerticalScrollIndicator={false}
-            >
-              {displayWorkout.description && (
-                <View style={styles.section}>
-                  <Text style={styles.description}>{displayWorkout.description}</Text>
-                </View>
-              )}
-
-              <View style={styles.statsPanel}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{displayWorkout.exercise_count}</Text>
-                  <Text style={styles.statLabel}>exercises</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{displayWorkout.set_count || 0}</Text>
-                  <Text style={styles.statLabel}>sets</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{formatDuration(parseDurationToMinutes(displayWorkout.estimated_duration))}</Text>
-                  <Text style={styles.statLabel}>duration</Text>
-                </View>
+            <View style={styles.muscleSection}>
+              <Text style={styles.sectionTitle}>Target Muscles</Text>
+              <View style={styles.muscleChips}>
+                {displayWorkout.muscles && displayWorkout.muscles.map((muscle) => (
+                  <View key={muscle} style={styles.muscleChip}>
+                    <Text style={styles.muscleChipText}>
+                      {muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ')}
+                    </Text>
+                  </View>
+                ))}
               </View>
+            </View>
 
-              <View style={styles.muscleSection}>
-                <Text style={styles.sectionTitle}>Target Muscles</Text>
-                <View style={styles.muscleChips}>
-                  {displayWorkout.muscles && displayWorkout.muscles.map((muscle) => (
-                    <View key={muscle} style={styles.muscleChip}>
-                      <Text style={styles.muscleChipText}>
-                        {muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ')}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+            {loading ? (
+              <View style={styles.loadingSection}>
+                <Text style={styles.loadingText}>Loading exercises...</Text>
               </View>
+            ) : error ? (
+              <View style={styles.errorSection}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : displayWorkout.exercises && displayWorkout.exercises.length > 0 ? (
+              <View style={styles.exercisesSection}>
+                <Text style={styles.sectionTitle}>Exercises</Text>
+                {displayWorkout.exercises.map((exercise, index) => (
+                  <NonDraggableExerciseCard
+                    key={exercise.id}
+                    exercise={exercise}
+                    index={index + 1}
+                  />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.section}>
+                <Text style={styles.noExercisesText}>No exercises found for this workout</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Animated.View>
+    );
+  };
 
-              {loading ? (
-                <View style={styles.loadingSection}>
-                  <Text style={styles.loadingText}>Loading exercises...</Text>
-                </View>
-              ) : error ? (
-                <View style={styles.errorSection}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : displayWorkout.exercises && displayWorkout.exercises.length > 0 ? (
-                <View style={styles.exercisesSection}>
-                  <Text style={styles.sectionTitle}>Exercises</Text>
-                  {displayWorkout.exercises.map((exercise, index) => (
-                    <NonDraggableExerciseCard
-                      key={exercise.id}
-                      exercise={exercise}
-                      index={index + 1}
-                    />
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.section}>
-                  <Text style={styles.noExercisesText}>No exercises found for this workout</Text>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </Animated.View>
+  // iOS uses the standard Modal
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        onRequestClose={onClose}
+        animationType="fade"
+        accessibilityViewIsModal={true}
+      >
+        <View style={styles.iosOverlay}> 
+          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          {renderContent()} 
+        </View>
+      </Modal>
+    );
+  }
+
+  // Android renders a View simulating a modal overlay
+  if (!visible) {
+    return null; // Don't render anything if not visible
+  }
+
+  return (
+    <View style={styles.androidFakeModalWrapper}>
+      {/* Backdrop for Android fake modal */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Centering container for Android */}
+      <View style={styles.androidCenteringContainer}>
+         {renderContent()} 
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  // --- iOS Specific Styles --- 
+  iosOverlay: { // Overlay for iOS Modal
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
+    justifyContent: 'flex-end', // Aligned to bottom
+    alignItems: 'center',
   },
-  backdrop: {
+  backdrop: { // Used by both, but context differs
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(2, 26, 25, 0.8)',
   },
-  modalContainer: {
+
+  // --- Android Specific Styles ---
+  androidFakeModalWrapper: { // Covers the whole screen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000, // High zIndex to be on top
+  },
+  androidCenteringContainer: { // Centers the modal content within the wrapper
+    flex: 1,
+    justifyContent: 'flex-end', // Aligned to bottom
+    alignItems: 'center',
+  },
+
+  // --- Common Styles --- 
+  modalContainer: { // The visible modal box
     backgroundColor: '#031A19',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    height: '90%',
+    height: '90%', 
+    width: '100%', 
     overflow: 'hidden',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 -8px 20px -5px rgba(0, 0, 0, 0.3)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.25,
-        shadowRadius: 12,
-        elevation: 20,
-      },
-    }),
   },
   modalContent: {
     flex: 1,

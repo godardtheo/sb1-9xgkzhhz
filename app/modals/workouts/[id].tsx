@@ -10,6 +10,7 @@ import { useWorkoutStore } from '@/lib/store/workoutStore';
 import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Type for data coming FROM ExerciseModal
 type ModalExerciseSelection = {
@@ -22,10 +23,10 @@ type ModalExerciseSelection = {
 type Exercise = {
   id: string;
   name: string;
-  muscle_primary?: string[]; // Made optional to match DraggableExerciseCard
+  muscle_primary?: string[];
   muscle_secondary?: string[];
-  muscle?: string; // Added optional old field for ExerciseDetailsModal compatibility
-  equipment: string[];
+  muscle?: string;
+  equipment?: string[];
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -35,6 +36,7 @@ type Exercise = {
     minReps: string;
     maxReps: string;
   }[];
+  totalExercises: number;
 };
 
 export default function EditWorkoutScreen() {
@@ -52,39 +54,18 @@ export default function EditWorkoutScreen() {
   const { setNeedsRefresh } = useWorkoutStore();
   const scrollRef = useRef<ScrollView>(null);
   
-  // Store refs to exercise cards for animation
-  const exerciseRefs = useRef<Array<{animateMove: (direction: -1 | 1, distance: number) => void}>>([]);
-  // Store item heights for animation
-  const [itemHeights, setItemHeights] = useState<number[]>([]);
-  // Keep track of whether a reorder is in progress
-  const [isReordering, setIsReordering] = useState(false);
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
   const estimatedDuration = 5 + (exercises.length * 4) + (totalSets * 3);
   const formattedDuration = formatDuration(estimatedDuration);
 
-  // Function to update item height in the array
-  const updateItemHeight = (index: number, height: number) => {
-    setItemHeights(prev => {
-      const newHeights = [...prev];
-      newHeights[index] = height;
-      return newHeights;
-    });
-  };
-
   // Handler for moving an exercise up
   const handleMoveUp = (index: number) => {
-    if (index <= 0 || isReordering) return;
+    if (index <= 0) return;
     
-    setIsReordering(true);
-    
-    // Animate the current item moving up
-    exerciseRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
-    // Animate the previous item moving down
-    exerciseRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
-    
-    // Update the state after animation completes
     setTimeout(() => {
       setExercises(prev => {
         const newExercises = [...prev];
@@ -93,22 +74,13 @@ export default function EditWorkoutScreen() {
         newExercises[index-1] = temp;
         return newExercises;
       });
-      setIsReordering(false);
-    }, 250);
+    }, 0);
   };
 
   // Handler for moving an exercise down
   const handleMoveDown = (index: number) => {
-    if (index >= exercises.length - 1 || isReordering) return;
+    if (index >= exercises.length - 1) return;
     
-    setIsReordering(true);
-    
-    // Animate the current item moving down
-    exerciseRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
-    // Animate the next item moving up
-    exerciseRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
-    
-    // Update the state after animation completes
     setTimeout(() => {
       setExercises(prev => {
         const newExercises = [...prev];
@@ -117,8 +89,7 @@ export default function EditWorkoutScreen() {
         newExercises[index+1] = temp;
         return newExercises;
       });
-      setIsReordering(false);
-    }, 250);
+    }, 0);
   };
 
   useEffect(() => {
@@ -198,7 +169,8 @@ export default function EditWorkoutScreen() {
               id: set.id,
               minReps: set.min_reps.toString(),
               maxReps: set.max_reps.toString()
-            }))
+            })),
+            totalExercises: item.exercises.totalExercises
           };
         });
 
@@ -311,7 +283,7 @@ export default function EditWorkoutScreen() {
   };
 
   const handleExerciseInfo = (exercise: Exercise) => {
-    router.push(`/modals/exercise-details/${exercise.id}`);
+    router.navigate(`/modals/exercise-details/${exercise.id}`);
   };
 
   const handleAddExercise = async (selectedExercises: ModalExerciseSelection[]) => {
@@ -473,16 +445,6 @@ export default function EditWorkoutScreen() {
     }));
   };
 
-  // Update refs array when exercises change
-  useEffect(() => {
-    exerciseRefs.current = exerciseRefs.current.slice(0, exercises.length);
-  }, [exercises.length]);
-
-  // Handle layout measurement for each card
-  const handleLayout = (index: number, height: number) => {
-    updateItemHeight(index, height);
-  };
-
   if (loading && exercises.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -493,7 +455,7 @@ export default function EditWorkoutScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable 
           onPress={() => router.back()}
           style={styles.backButton}
@@ -559,10 +521,7 @@ export default function EditWorkoutScreen() {
           <>
             {exercises.map((exercise, index) => (
               <DraggableExerciseCard
-                key={`${exercise.id}-${index}`}
-                ref={el => {
-                  if (el) exerciseRefs.current[index] = el;
-                }}
+                key={exercise.id}
                 exercise={exercise}
                 index={index}
                 totalExercises={exercises.length}
@@ -574,7 +533,7 @@ export default function EditWorkoutScreen() {
                 onRepInputBlur={validateAndCorrectReps}
                 onAddSet={handleAddSet}
                 onRemoveSet={handleRemoveSet}
-                scrollRef={scrollRef}
+                scrollRef={scrollRef as React.RefObject<ScrollView>}
               />
             ))}
 
@@ -654,7 +613,6 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 24,
-    paddingTop: Platform.OS === 'web' ? 40 : 24,
     backgroundColor: '#021a19',
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',

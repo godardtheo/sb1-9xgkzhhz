@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useSharedValue, withSpring } from 'react-native-reanimated';
+import { useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
 import { Dimensions } from 'react-native';
 
 type Workout = {
@@ -49,24 +49,40 @@ export function useWorkoutReorder(initialWorkouts: Workout[]) {
 
   // Update item heights and calculate offsets
   const updateItemHeight = useCallback((index: number, height: number) => {
-    if (index >= 0 && index < workouts.length) {
-      // Update height at specific index
-      const newHeights = [...itemHeights.value];
-      newHeights[index] = height;
-      itemHeights.value = newHeights;
+    console.log(`[Hook updateItemHeight] Received index: ${index}, height: ${height}`);
+    if (index >= 0) { 
+      // --- Direct SharedValue Update --- 
+      const currentHeights = itemHeights.value;
+      // Ensure array is long enough, pad with 0 if needed
+      while (currentHeights.length <= index) {
+        currentHeights.push(0);
+      }
+      // Directly assign the value
+      currentHeights[index] = height;
+      // Trigger an update by assigning the modified array back (might be necessary)
+      itemHeights.value = [...currentHeights]; // Spread to ensure change detection?
       
+      // Use runOnJS to log the value from the JS thread after the update attempt
+      runOnJS(console.log)(
+        `[Hook updateItemHeight AFTER JS] Updated itemHeights.value[${index}]=${height}. Full array:`, 
+        JSON.stringify(itemHeights.value)
+      );
+      // --- End Direct Update ---
+
       // Recalculate offsets when heights change
       const offsets: number[] = [];
       let currentOffset = 0;
       
-      for (let i = 0; i < newHeights.length; i++) {
+      for (let i = 0; i < currentHeights.length; i++) {
         offsets[i] = currentOffset;
-        currentOffset += newHeights[i] || 0;
+        currentOffset += currentHeights[i] || 0;
       }
       
       itemOffsets.value = offsets;
+    } else {
+      console.warn(`[Hook updateItemHeight] Ignored update for invalid index: ${index}`);
     }
-  }, [workouts.length, itemHeights]);
+  }, [itemHeights, itemOffsets]);
   
   // Update translations during drag
   const handleDragActive = useCallback((index: number, y: number) => {

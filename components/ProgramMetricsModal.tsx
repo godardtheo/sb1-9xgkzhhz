@@ -1,4 +1,12 @@
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Modal, // iOS only 
+  Pressable, 
+  ScrollView, 
+  Platform 
+} from 'react-native';
 import { X, Dumbbell, Timer, ChartBar as BarChart3 } from 'lucide-react-native';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
@@ -13,110 +21,158 @@ type Props = {
 };
 
 export default function ProgramMetricsModal({ visible, onClose, metrics }: Props) {
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      onRequestClose={onClose}
-      animationType="fade"
+
+  // Common content renderer
+  const renderContent = () => (
+    <Animated.View 
+      style={styles.modalContainer}
+      entering={SlideInDown.springify().damping(15)}
+      exiting={SlideOutDown.springify().damping(15)}
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <Animated.View 
-          style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.springify().damping(15)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Program Metrics</Text>
-              <Pressable 
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
+      <View style={styles.modalContent}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Program Metrics</Text>
+          <Pressable 
+            onPress={onClose}
+            style={styles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <X size={24} color="#5eead4" />
+          </Pressable>
+        </View>
+
+        <ScrollView style={styles.content}>
+          <View style={styles.metricsGrid}>
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIcon, styles.workoutsIcon]}>
+                <Dumbbell size={24} color="#042f2e" />
+              </View>
+              <Text style={styles.metricValue}>{metrics.workouts}</Text>
+              <Text style={styles.metricLabel}>Workouts</Text>
+              <Text style={styles.metricDescription}>
+                Total number of workouts in this program
+              </Text>
             </View>
 
-            <ScrollView style={styles.content}>
-              <View style={styles.metricsGrid}>
-                <View style={styles.metricCard}>
-                  <View style={[styles.metricIcon, styles.workoutsIcon]}>
-                    <Dumbbell size={24} color="#042f2e" />
-                  </View>
-                  <Text style={styles.metricValue}>{metrics.workouts}</Text>
-                  <Text style={styles.metricLabel}>Workouts</Text>
-                  <Text style={styles.metricDescription}>
-                    Total number of workouts in this program
-                  </Text>
-                </View>
-
-                <View style={styles.metricCard}>
-                  <View style={[styles.metricIcon, styles.setsIcon]}>
-                    <BarChart3 size={24} color="#042f2e" />
-                  </View>
-                  <Text style={styles.metricValue}>{metrics.sets}</Text>
-                  <Text style={styles.metricLabel}>Total Sets</Text>
-                  <Text style={styles.metricDescription}>
-                    Combined number of sets across all workouts
-                  </Text>
-                </View>
-
-                <View style={styles.metricCard}>
-                  <View style={[styles.metricIcon, styles.durationIcon]}>
-                    <Timer size={24} color="#042f2e" />
-                  </View>
-                  <Text style={styles.metricValue}>{metrics.duration}</Text>
-                  <Text style={styles.metricLabel}>Duration</Text>
-                  <Text style={styles.metricDescription}>
-                    Estimated total duration of the program
-                  </Text>
-                </View>
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIcon, styles.setsIcon]}>
+                <BarChart3 size={24} color="#042f2e" />
               </View>
+              <Text style={styles.metricValue}>{metrics.sets}</Text>
+              <Text style={styles.metricLabel}>Total Sets</Text>
+              <Text style={styles.metricDescription}>
+                Combined number of sets across all workouts
+              </Text>
+            </View>
 
-              <View style={styles.guidelines}>
-                <Text style={styles.guidelinesTitle}>Program Guidelines</Text>
-                <View style={styles.guidelineItem}>
-                  <Text style={styles.guidelineLabel}>Rest Between Workouts</Text>
-                  <Text style={styles.guidelineValue}>24-48 hours</Text>
-                </View>
-                <View style={styles.guidelineItem}>
-                  <Text style={styles.guidelineLabel}>Weekly Frequency</Text>
-                  <Text style={styles.guidelineValue}>3-5 sessions</Text>
-                </View>
-                <View style={styles.guidelineItem}>
-                  <Text style={styles.guidelineLabel}>Program Duration</Text>
-                  <Text style={styles.guidelineValue}>4-8 weeks</Text>
-                </View>
-                <Text style={styles.guidelineNote}>
-                  Note: These are general guidelines. Adjust based on your fitness level and goals.
-                </Text>
+            <View style={styles.metricCard}>
+              <View style={[styles.metricIcon, styles.durationIcon]}>
+                <Timer size={24} color="#042f2e" />
               </View>
-            </ScrollView>
+              <Text style={styles.metricValue}>{metrics.duration}</Text>
+              <Text style={styles.metricLabel}>Duration</Text>
+              <Text style={styles.metricDescription}>
+                Estimated total duration of the program
+              </Text>
+            </View>
           </View>
-        </Animated.View>
+
+          <View style={styles.guidelines}>
+            <Text style={styles.guidelinesTitle}>Program Guidelines</Text>
+            <View style={styles.guidelineItem}>
+              <Text style={styles.guidelineLabel}>Rest Between Workouts</Text>
+              <Text style={styles.guidelineValue}>24-48 hours</Text>
+            </View>
+            <View style={styles.guidelineItem}>
+              <Text style={styles.guidelineLabel}>Weekly Frequency</Text>
+              <Text style={styles.guidelineValue}>3-5 sessions</Text>
+            </View>
+            <View style={styles.guidelineItem}>
+              <Text style={styles.guidelineLabel}>Program Duration</Text>
+              <Text style={styles.guidelineValue}>4-8 weeks</Text>
+            </View>
+            <Text style={styles.guidelineNote}>
+              Note: These are general guidelines. Adjust based on your fitness level and goals.
+            </Text>
+          </View>
+        </ScrollView>
       </View>
-    </Modal>
+    </Animated.View>
   );
+
+  // iOS uses the standard Modal
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        onRequestClose={onClose}
+        animationType="fade"
+      >
+        <View style={styles.iosOverlay}> 
+          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          {renderContent()}
+        </View>
+      </Modal>
+    );
+  }
+
+  // Android renders a View simulating a modal overlay
+  if (!visible) {
+    return null; // Don't render anything if not visible
+  }
+
+  return (
+    <View style={styles.androidFakeModalWrapper}>
+      {/* Backdrop for Android fake modal */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Centering container for Android */}
+      <View style={styles.androidCenteringContainer}>
+         {renderContent()}
+      </View>
+    </View>
+  );
+
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  // --- iOS Specific Styles --- 
+  iosOverlay: { // Overlay for iOS Modal
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
+    // ProgramMetrics is aligned to bottom, not centered
+    justifyContent: 'flex-end', 
+    alignItems: 'center',
   },
-  backdrop: {
+  backdrop: { // Used by both, but context differs
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(2, 26, 25, 0.8)',
   },
-  modalContainer: {
+
+  // --- Android Specific Styles ---
+  androidFakeModalWrapper: { // Covers the whole screen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000, // High zIndex to be on top
+  },
+  androidCenteringContainer: { // Centers the modal content within the wrapper
+    flex: 1,
+    // ProgramMetrics is aligned to bottom, not centered
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+
+  // --- Common Styles --- 
+  modalContainer: { // The visible modal box
     backgroundColor: '#031A19',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    height: '80%',
+    height: '80%', // Fixed height
+    width: '100%', // Full width
     overflow: 'hidden',
+    // Remove positioning styles handled by overlay/wrapper
   },
   modalContent: {
     flex: 1,

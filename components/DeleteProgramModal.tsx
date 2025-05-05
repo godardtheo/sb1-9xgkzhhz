@@ -1,4 +1,11 @@
-import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Modal, // iOS only
+  Pressable, 
+  Platform 
+} from 'react-native';
 import { X } from 'lucide-react-native';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
@@ -10,74 +17,123 @@ type Props = {
   programName: string;
 };
 
-export default function DeleteProgramModal({ visible, onConfirm, onClose, loading, programName }: Props) {
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      onRequestClose={onClose}
-      animationType="fade"
+export default function DeleteProgramModal({ 
+  visible, 
+  onConfirm, 
+  onClose, 
+  loading, 
+  programName 
+}: Props) {
+
+  // Common content renderer
+  const renderContent = () => (
+    <Animated.View 
+      style={styles.modalContainer}
+      entering={SlideInDown.springify().damping(15)}
+      exiting={SlideOutDown.springify().damping(15)}
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <Animated.View 
-          style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.springify().damping(15)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Delete Program</Text>
-              <Pressable 
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
-            </View>
+      <View style={styles.modalContent}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Delete Program</Text>
+          <Pressable 
+            onPress={onClose}
+            style={styles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <X size={24} color="#5eead4" />
+          </Pressable>
+        </View>
 
-            <Text style={styles.message}>
-              Are you sure you want to delete "{programName}"? This action cannot be undone.
+        <Text style={styles.message}>
+          Are you sure you want to delete "{programName}"? This action cannot be undone.
+        </Text>
+
+        <View style={styles.actions}>
+          <Pressable 
+            style={[styles.button, styles.cancelButton]} 
+            onPress={onClose}
+            disabled={loading}
+          >
+            <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancel</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.button, styles.deleteButton]} 
+            onPress={onConfirm}
+            disabled={loading}
+          >
+            <Text style={[styles.buttonText, styles.deleteButtonText]}>
+              {loading ? 'Deleting...' : 'Delete'}
             </Text>
-
-            <View style={styles.actions}>
-              <Pressable 
-                style={[styles.button, styles.cancelButton]} 
-                onPress={onClose}
-                disabled={loading}
-              >
-                <Text style={[styles.buttonText, styles.cancelButtonText]}>Cancel</Text>
-              </Pressable>
-              <Pressable 
-                style={[styles.button, styles.deleteButton]} 
-                onPress={onConfirm}
-                disabled={loading}
-              >
-                <Text style={[styles.buttonText, styles.deleteButtonText]}>
-                  {loading ? 'Deleting...' : 'Delete'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </Animated.View>
+          </Pressable>
+        </View>
       </View>
-    </Modal>
+    </Animated.View>
   );
+
+  // iOS uses the standard Modal
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        onRequestClose={onClose}
+        animationType="fade"
+      >
+        <View style={styles.iosOverlay}> 
+          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          {renderContent()}
+        </View>
+      </Modal>
+    );
+  }
+
+  // Android renders a View simulating a modal overlay
+  if (!visible) {
+    return null; // Don't render anything if not visible
+  }
+
+  return (
+    <View style={styles.androidFakeModalWrapper}>
+      {/* Backdrop for Android fake modal */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Centering container for Android */}
+      <View style={styles.androidCenteringContainer}>
+         {renderContent()}
+      </View>
+    </View>
+  );
+
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  // --- iOS Specific Styles --- 
+  iosOverlay: { // Overlay for iOS Modal
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
   },
-  backdrop: {
+  backdrop: { // Used by both, but context differs
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(2, 26, 25, 0.8)',
   },
-  modalContainer: {
+
+  // --- Android Specific Styles ---
+  androidFakeModalWrapper: { // Covers the whole screen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000, // High zIndex to be on top
+  },
+  androidCenteringContainer: { // Centers the modal content within the wrapper
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // --- Common Styles --- 
+  modalContainer: { // The visible modal box
     width: '90%',
     maxWidth: 400,
     backgroundColor: '#115e59',

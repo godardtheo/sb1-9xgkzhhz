@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Info, Trash2, Plus, CircleMinus as MinusCircle, Dumbbell } from 'lucide-react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -11,21 +11,24 @@ import { useWorkoutStore } from '@/lib/store/workoutStore';
 import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Type for data coming FROM ExerciseModal
 type ModalExerciseSelection = {
   id: string;
   name: string;
-  muscle?: string; // Inclure les champs connus retournés par le modal
-  equipment?: string; // Peut être un string ou string[] selon le modal, ajuster si besoin
+  muscle?: string;
+  equipment?: string | string[]; // Ajusté pour accepter string ou string[] du modal
+  muscle_primary?: string[];
+  muscle_secondary?: string[];
   // ... autres champs possibles
 };
 
 type Exercise = {
   id: string;
   name: string;
-  muscle?: string; // Rendu optionnel pour correspondre à DraggableExerciseCard
-  equipment: string; // Gardé comme string ici, mais attention aux incohérences
+  muscle?: string;
+  equipment?: string[]; // Changé en optionnel et tableau
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -35,9 +38,11 @@ type Exercise = {
     minReps: string;
     maxReps: string;
   }[];
+  totalExercises: number;
 };
 
 export default function NewWorkoutScreen() {
+  // console.log("[NewWorkoutScreen] Rendering component...");
   const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -48,40 +53,18 @@ export default function NewWorkoutScreen() {
   const [error, setError] = useState<string | null>(null);
   const { setNeedsRefresh } = useWorkoutStore();
   const scrollRef = useRef<ScrollView>(null);
-  // Store refs to exercise cards for animation
-  const exerciseRefs = useRef<Array<{animateMove: (direction: -1 | 1, distance: number) => void}>>([]);
-  // Store item heights for animation
-  const [itemHeights, setItemHeights] = useState<number[]>([]);
-
-  // Keep track of whether a reorder is in progress
-  const [isReordering, setIsReordering] = useState(false);
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
   const estimatedDuration = 5 + (exercises.length * 4) + (totalSets * 3);
   const formattedDuration = formatDuration(estimatedDuration);
 
-  // Function to update item height in the array
-  const updateItemHeight = (index: number, height: number) => {
-    setItemHeights(prev => {
-      const newHeights = [...prev];
-      newHeights[index] = height;
-      return newHeights;
-    });
-  };
-
   // Handler for moving an exercise up
   const handleMoveUp = (index: number) => {
-    if (index <= 0 || isReordering) return;
+    if (index <= 0) return;
     
-    setIsReordering(true);
-    
-    // Animate the current item moving up
-    exerciseRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
-    // Animate the previous item moving down
-    exerciseRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
-    
-    // Update the state after animation completes
     setTimeout(() => {
       setExercises(prev => {
         const newExercises = [...prev];
@@ -90,22 +73,13 @@ export default function NewWorkoutScreen() {
         newExercises[index-1] = temp;
         return newExercises;
       });
-      setIsReordering(false);
-    }, 250);
+    }, 0);
   };
 
   // Handler for moving an exercise down
   const handleMoveDown = (index: number) => {
-    if (index >= exercises.length - 1 || isReordering) return;
+    if (index >= exercises.length - 1) return;
     
-    setIsReordering(true);
-    
-    // Animate the current item moving down
-    exerciseRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
-    // Animate the next item moving up
-    exerciseRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
-    
-    // Update the state after animation completes
     setTimeout(() => {
       setExercises(prev => {
         const newExercises = [...prev];
@@ -114,27 +88,39 @@ export default function NewWorkoutScreen() {
         newExercises[index+1] = temp;
         return newExercises;
       });
-      setIsReordering(false);
-    }, 250);
+    }, 0);
   };
 
   // Update signature to accept simpler type from Modal
   const handleAddExercise = (selectedExercises: ModalExerciseSelection[]) => {
     // Maintenir l'ordre exact des exercices sélectionnés
-    const newExercises = selectedExercises.map(exerciseSelection => ({
-      // Construire l'objet Exercise complet à partir de la sélection
-      id: exerciseSelection.id,
-      name: exerciseSelection.name,
-      muscle: exerciseSelection.muscle || 'N/A', // Fournir une valeur par défaut si muscle est requis mais optionnel dans la sélection
-      equipment: exerciseSelection.equipment || 'Bodyweight', // Fournir valeur par défaut
-      // Ajouter les autres champs par défaut si nécessaire
-      sets: Array(4).fill(null).map(() => ({
-        id: uuid.v4(),
-        minReps: '6',
-        maxReps: '12'
-      }))
-    }));
-    
+    const newExercises: Exercise[] = selectedExercises.map(exerciseSelection => {
+      // Gérer le format de l'équipement
+      let equipmentArray: string[] | undefined = undefined;
+      if (Array.isArray(exerciseSelection.equipment)) {
+        equipmentArray = exerciseSelection.equipment;
+      } else if (typeof exerciseSelection.equipment === 'string') {
+        equipmentArray = [exerciseSelection.equipment];
+      }
+
+      return {
+        // Construire l'objet Exercise complet à partir de la sélection
+        id: exerciseSelection.id,
+        name: exerciseSelection.name,
+        muscle: exerciseSelection.muscle || undefined, // Utiliser undefined si non fourni
+        equipment: equipmentArray, // Utiliser le tableau formaté
+        muscle_primary: exerciseSelection.muscle_primary, // Ajouter si présents dans ModalExerciseSelection
+        muscle_secondary: exerciseSelection.muscle_secondary,
+        // Ajouter les autres champs par défaut si nécessaire
+        sets: Array(4).fill(null).map(() => ({
+          id: uuid.v4() as string,
+          minReps: '6',
+          maxReps: '12'
+        })),
+        totalExercises: 1 // Remettre requis
+      }
+    });
+
     // Ajouter les nouveaux exercices à la fin de la liste existante
     setExercises(prev => [...prev, ...newExercises]);
     setShowExerciseModal(false);
@@ -273,169 +259,157 @@ export default function NewWorkoutScreen() {
   };
 
   const handleExerciseInfo = (exercise: Exercise) => {
-    router.push(`/modals/exercise-details/${exercise.id}`);
+    router.navigate(`/modals/exercise-details/${exercise.id}`);
   };
 
   const removeExercise = (exerciseId: string) => {
     setExercises(prev => prev.filter(ex => ex.id !== exerciseId));
   };
 
-  // Update refs array when exercises change
-  useEffect(() => {
-    exerciseRefs.current = exerciseRefs.current.slice(0, exercises.length);
-  }, [exercises.length]);
-
-  // Handle layout measurement for each card
-  const handleLayout = (index: number, height: number) => {
-    updateItemHeight(index, height);
-  };
-
+  // console.log("[NewWorkoutScreen] Starting return...");
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.container}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-      >
-        <View style={styles.wrapper}>
-          <View style={styles.header}>
-            <Pressable 
-              onPress={() => router.back()}
-              style={styles.backButton}
-              hitSlop={8}
-            >
-              <ArrowLeft size={24} color="#5eead4" />
-            </Pressable>
-            <View style={styles.titleContainer}>
-              <TextInput
-                style={[styles.titleInput, Platform.OS === 'web' && styles.titleInputWeb]}
-                placeholder="New workout"
-                placeholderTextColor="#5eead4"
-                value={name}
-                onChangeText={setName}
-              />
-              <TextInput
-                style={[styles.descriptionInput, Platform.OS === 'web' && styles.descriptionInputWeb]}
-                placeholder="Description"
-                placeholderTextColor="#5eead4"
-                value={description}
-                onChangeText={setDescription}
-                multiline
-              />
-            </View>
-          </View>
-
-          <View style={styles.statsPanel}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalExercises}</Text>
-              <Text style={styles.statLabel}>exercises</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalSets}</Text>
-              <Text style={styles.statLabel}>sets</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{formattedDuration}</Text>
-              <Text style={styles.statLabel}>duration</Text>
-            </View>
-          </View>
-
-          <ScrollView 
-            ref={scrollRef}
-            style={styles.scrollView}
-            contentContainerStyle={styles.exercisesList}
+    <View style={styles.container as any}>
+      {/* {(() => { console.log("[NewWorkoutScreen] Rendering SafeAreaView content..."); return null; })()} */}
+      <View style={styles.wrapper as any}>
+        {/* {(() => { console.log("[NewWorkoutScreen] Rendering Header..."); return null; })()} */}
+        <View style={styles.header as any}>
+          <Pressable 
+            onPress={() => router.back()}
+            style={styles.backButton as any}
+            hitSlop={8}
           >
-            {exercises.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Dumbbell size={48} color="#14b8a6" strokeWidth={1.5} />
-                <Text style={styles.emptyStateText}>
-                  The workout is empty. Add exercises
-                </Text>
-                <Pressable 
-                  style={styles.addExerciseButton}
-                  onPress={() => setShowExerciseModal(true)}
-                >
-                  <Plus size={20} color="#ccfbf1" />
-                  <Text style={styles.addExerciseText}>Add Exercise</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <>
-                {exercises.map((exercise, index) => (
-                  <DraggableExerciseCard
-                    key={`${exercise.id}-${index}`}
-                    ref={el => {
-                      if (el) exerciseRefs.current[index] = el;
-                    }}
-                    exercise={exercise}
-                    index={index}
-                    totalExercises={exercises.length}
-                    onMoveUp={handleMoveUp}
-                    onMoveDown={handleMoveDown}
-                    onRemove={removeExercise}
-                    onInfo={handleExerciseInfo}
-                    onRepInputChange={handleRepInputChange}
-                    onRepInputBlur={validateAndCorrectReps}
-                    onAddSet={handleAddSet}
-                    onRemoveSet={handleRemoveSet}
-                    scrollRef={scrollRef}
-                  />
-                ))}
-
-                <Pressable 
-                  style={styles.addExerciseButton}
-                  onPress={() => setShowExerciseModal(true)}
-                >
-                  <Plus size={20} color="#ccfbf1" />
-                  <Text style={styles.addExerciseText}>Add Exercise</Text>
-                </Pressable>
-              </>
-            )}
-          </ScrollView>
-
-          <View style={styles.bottomBar}>
-            <Pressable 
-              style={styles.saveButton}
-              onPress={handleSave}
-              disabled={loading}
-            >
-              <Text style={styles.saveButtonText}>
-                {loading ? 'Saving...' : 'Save Workout'}
-              </Text>
-            </Pressable>
+            <ArrowLeft size={24} color="#5eead4" />
+          </Pressable>
+          <View style={styles.titleContainer as any}>
+            <TextInput
+              style={[styles.titleInput as any, Platform.OS === 'web' && styles.titleInputWeb]}
+              placeholder="New workout"
+              placeholderTextColor="#5eead4"
+              value={name}
+              onChangeText={setName}
+            />
+            <TextInput
+              style={[styles.descriptionInput as any, Platform.OS === 'web' && styles.descriptionInputWeb]}
+              placeholder="Description"
+              placeholderTextColor="#5eead4"
+              value={description}
+              onChangeText={setDescription}
+              multiline
+            />
           </View>
         </View>
-      </KeyboardAvoidingView>
+        {/* {(() => { console.log("[NewWorkoutScreen] Header rendered."); return null; })()} */}
 
-      {showExerciseModal && (
-        <ExerciseModal
-          visible={showExerciseModal}
-          onClose={() => setShowExerciseModal(false)}
-          onSelect={handleAddExercise}
-          multiSelect={true}
-        />
-      )}
-    </SafeAreaView>
+        <View style={styles.statsPanel as any}>
+          {/* {(() => { console.log("[NewWorkoutScreen] Rendering Stats Panel..."); return null; })()} */}
+          <View style={styles.statItem as any}>
+            <Text style={styles.statValue as any}>{totalExercises}</Text>
+            <Text style={styles.statLabel as any}>exercises</Text>
+          </View>
+          <View style={styles.statDivider as any} />
+          <View style={styles.statItem as any}>
+            <Text style={styles.statValue as any}>{totalSets}</Text>
+            <Text style={styles.statLabel as any}>sets</Text>
+          </View>
+          <View style={styles.statDivider as any} />
+          <View style={styles.statItem as any}>
+            <Text style={styles.statValue as any}>{formattedDuration}</Text>
+            <Text style={styles.statLabel as any}>duration</Text>
+          </View>
+        </View>
+        {/* {(() => { console.log("[NewWorkoutScreen] Stats Panel rendered."); return null; })()} */}
+
+        <ScrollView 
+          ref={scrollRef}
+          style={styles.scrollView as any}
+          contentContainerStyle={styles.exercisesList as any}
+        >
+          {/* {(() => { console.log("[NewWorkoutScreen] Rendering ScrollView section..."); return null; })()} */}
+          {exercises.length === 0 ? (
+            <View style={styles.emptyState as any}>
+              <Dumbbell size={48} color="#14b8a6" strokeWidth={1.5} />
+              <Text style={styles.emptyStateText as any}>
+                The workout is empty. Add exercises
+              </Text>
+              <Pressable 
+                style={styles.addExerciseButton as any}
+                onPress={() => setShowExerciseModal(true)}
+              >
+                <Plus size={20} color="#ccfbf1" />
+                <Text style={styles.addExerciseText as any}>Add Exercise</Text>
+              </Pressable>
+            </View>
+          ) : (
+            exercises.map((exercise, index) => (
+              <DraggableExerciseCard
+                key={exercise.id}
+                exercise={exercise}
+                index={index}
+                totalExercises={exercises.length}
+                onMoveUp={handleMoveUp}
+                onMoveDown={handleMoveDown}
+                onRemove={removeExercise}
+                onInfo={handleExerciseInfo}
+                onRepInputChange={handleRepInputChange}
+                onRepInputBlur={validateAndCorrectReps}
+                onAddSet={handleAddSet}
+                onRemoveSet={handleRemoveSet}
+                scrollRef={scrollRef as React.RefObject<ScrollView>}
+              />
+            ))
+          )}
+
+          {/* Toujours afficher le bouton Ajouter en bas de la liste */}
+          {exercises.length > 0 && (
+            <Pressable 
+              style={styles.addExerciseButton as any}
+              onPress={() => setShowExerciseModal(true)}
+            >
+              <Plus size={20} color="#ccfbf1" />
+              <Text style={styles.addExerciseText as any}>Add Exercise</Text>
+            </Pressable>
+          )}
+        </ScrollView>
+
+        {/* {(() => { console.log("[NewWorkoutScreen] Rendering Bottom Bar..."); return null; })()} */}
+        <View style={styles.bottomBar as any}>
+          <Pressable 
+            style={styles.saveButton as any}
+            onPress={handleSave}
+            disabled={loading}
+          >
+            <Text style={styles.saveButtonText as any}>
+              {loading ? 'Saving...' : 'Save Workout'}
+            </Text>
+          </Pressable>
+        </View>
+        {/* {(() => { console.log("[NewWorkoutScreen] Bottom Bar rendered."); return null; })()} */}
+
+        {showExerciseModal && (
+          <ExerciseModal
+            visible={showExerciseModal}
+            onClose={() => setShowExerciseModal(false)}
+            onSelect={handleAddExercise}
+          />
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#021a19',
-  },
   container: {
     flex: 1,
+    backgroundColor: '#021a19',
   },
   wrapper: {
     flex: 1,
   },
   header: {
-    padding: 24,
-    paddingTop: Platform.OS === 'web' ? 40 : 24,
-    backgroundColor: '#021a19',
+    paddingTop: Platform.OS === 'android' ? 24 + (StatusBar.currentHeight || 0) : 24,
+    paddingBottom: 24,
+    paddingLeft: 24,
+    paddingRight: 24,
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',
     flexDirection: 'row',
@@ -462,8 +436,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
   titleInputWeb: {
-    // @ts-ignore
-    outlineStyle: 'none',
+    // Style web spécifique (vide maintenant si non nécessaire)
   },
   descriptionInput: {
     fontSize: 16,
@@ -477,8 +450,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   descriptionInputWeb: {
-    // @ts-ignore
-    outlineStyle: 'none',
+    // Style web spécifique (vide maintenant si non nécessaire)
   },
   statsPanel: {
     flexDirection: 'row',
@@ -620,14 +592,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
-    ...Platform.select({
-      web: {
-        // @ts-ignore
-        outlineStyle: 'none',
-        // @ts-ignore
-        cursor: 'text',
-      },
-    }),
   },
   setText: {
     fontSize: 14,

@@ -21,14 +21,13 @@ export default function InfoModal({ visible, onClose, title, children }: InfoMod
       transparent={true}
       onRequestClose={onClose}
       animationType="fade"
-      aria-modal="true"
       accessibilityViewIsModal={true}
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <Animated.View 
           style={styles.modalContainer}
-          entering={SlideInDown.springify().damping(15)}
+          entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
           exiting={SlideOutDown.springify().damping(15)}
         >
           <View style={styles.modalContent}>

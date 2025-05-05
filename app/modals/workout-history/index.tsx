@@ -10,6 +10,7 @@ import {
   getWorkoutHistory, 
   getWorkoutByDate 
 } from '@/lib/workoutUtils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function WorkoutHistoryModal() {
   const router = useRouter();
@@ -18,6 +19,9 @@ export default function WorkoutHistoryModal() {
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [isMonthSelectorVisible, setMonthSelectorVisible] = useState(false);
+  
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
   
   // Check if current month is the actual current month
   const isCurrentMonthToday = isSameMonth(currentMonth, new Date());
@@ -195,7 +199,7 @@ export default function WorkoutHistoryModal() {
       />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable onPress={handleBack}>
           <Ionicons name="arrow-back" size={24} color="#ccfbf1" />
         </Pressable>
@@ -298,7 +302,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 24,
     paddingBottom: 16,
     backgroundColor: '#042f2e',
     borderBottomWidth: 1,

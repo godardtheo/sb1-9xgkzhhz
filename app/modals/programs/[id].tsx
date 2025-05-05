@@ -4,15 +4,14 @@ import { ArrowLeft, Info, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import DraggableWorkoutCard from '@/components/DraggableWorkoutCard';
-import { useWorkoutReorder } from '@/hooks/useWorkoutReorder';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import WorkoutSelectionModal from '@/components/WorkoutSelectionModal';
 import ProgramMetricsModal from '@/components/ProgramMetricsModal';
 import ActiveProgramModal from '@/components/ActiveProgramModal';
 import DeleteProgramModal from '@/components/DeleteProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Define the structure for muscle counts
 type MuscleCount = {
@@ -21,17 +20,17 @@ type MuscleCount = {
   template_id?: string; // Adding temporarily to satisfy linter
 };
 
-type Workout = {
-  id: string;             // This is the program_workout id
+// Renommer pour éviter conflit potentiel
+type ProgramWorkout = {
+  id: string;             // program_workout id
   name: string;
   description: string | null;
-  muscles: string[];      // Keep original aggregated list for potential other uses or simplicity?
-                         // OR replace with musclesWithCounts? Let's replace for clarity in the card.
-  musclesWithCounts: MuscleCount[]; // Sorted list of muscles with their set counts
+  muscles: string[];      
+  musclesWithCounts: MuscleCount[]; // Assurer que ce champ est présent
   estimated_duration: string;
   exercise_count: number;
-  set_count: number; // Total set count remains useful for stats
-  template_id: string;    // This refers to the original workout template
+  set_count: number; 
+  template_id: string;    // Assurer que ce champ est présent
 };
 
 export default function EditProgramScreen() {
@@ -42,7 +41,7 @@ export default function EditProgramScreen() {
   const [isActive, setIsActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [workouts, setWorkouts] = useState<ProgramWorkout[]>([]);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showWorkoutSelection, setShowWorkoutSelection] = useState(false);
   const [showActiveModal, setShowActiveModal] = useState(false);
@@ -51,27 +50,26 @@ export default function EditProgramScreen() {
   const [shouldCheckActive, setShouldCheckActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const { setNeedsRefresh, getActiveProgram } = useProgramStore();
-  const workoutRefs = useRef<Array<{ animateMove: (direction: -1 | 1, distance: number) => void }>>([]);
+  const workoutRefs = useRef<Map<string, { animateMove: (direction: -1 | 1, distance: number) => void }>>(new Map());
   const [itemHeights, setItemHeights] = useState<number[]>([]);
   const [isReordering, setIsReordering] = useState(false);
+  
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
 
-  const {
-    workouts: reorderedWorkouts,
-    setWorkouts: setReorderedWorkouts,
-    activeIndex,
-    itemOffsets,
-    itemTranslations,
-    updateItemHeight,
-    handleDragActive,
-    handleDragEnd,
-  } = useWorkoutReorder(workouts);
-
-  // Keep workouts and reorderedWorkouts in sync
-  useEffect(() => {
-    if (workouts && workouts.length > 0) {
-      setReorderedWorkouts(workouts);
-    }
-  }, [workouts]);
+  // Fonction locale pour mettre à jour le state local itemHeights
+  const updateLocalItemHeight = (index: number, height: number) => {
+    setItemHeights(prev => {
+      const newHeights = [...prev];
+      // S'assurer que le tableau est assez grand
+      while (newHeights.length <= index) {
+        newHeights.push(0);
+      }
+      newHeights[index] = height;
+      console.log(`[Parent updateLocalItemHeight - [id].tsx] Updated local state index ${index}=${height}. Full array:`, JSON.stringify(newHeights));
+      return newHeights;
+    });
+  };
 
   useEffect(() => {
     if (id) {
@@ -245,7 +243,7 @@ export default function EditProgramScreen() {
       }));
 
       // Filter out any null results from errors during processing
-      const validProcessedWorkouts = processedWorkouts.filter(w => w !== null) as Workout[];
+      const validProcessedWorkouts = processedWorkouts.filter(w => w !== null) as ProgramWorkout[];
       setWorkouts(validProcessedWorkouts);
     } catch (err: any) {
       console.error('Error fetching program:', err);
@@ -301,8 +299,8 @@ export default function EditProgramScreen() {
       }
 
       // Update workout order
-      for (let i = 0; i < reorderedWorkouts.length; i++) {
-        const workout: Workout = reorderedWorkouts[i]; // Explicitly type workout
+      for (let i = 0; i < workouts.length; i++) {
+        const workout = workouts[i];
         const { error: workoutError } = await supabase
           .from('program_workouts')
           .update({ order: i })
@@ -491,7 +489,7 @@ export default function EditProgramScreen() {
           };
         }));
 
-        const validNewWorkouts = newWorkoutDetails.filter(w => w !== null) as Workout[];
+        const validNewWorkouts = newWorkoutDetails.filter(w => w !== null) as ProgramWorkout[];
         setWorkouts(prev => [...prev, ...validNewWorkouts]);
       }
       
@@ -504,7 +502,7 @@ export default function EditProgramScreen() {
     }
   };
 
-  const handleWorkoutInfo = (workout: Workout) => {
+  const handleWorkoutInfo = (workout: ProgramWorkout) => {
     // Instead of navigating to workout details, show info in an alert
     Alert.alert(
       workout.name,
@@ -513,33 +511,25 @@ export default function EditProgramScreen() {
   };
 
   const handleMoveUp = (index: number) => {
-    if (index <= 0 || isReordering) return;
-    setIsReordering(true);
-    workoutRefs.current[index]?.animateMove(-1, itemHeights[index-1] || 0);
-    workoutRefs.current[index-1]?.animateMove(1, itemHeights[index] || 0);
+    if (index <= 0) return;
     setTimeout(() => {
       setWorkouts(prev => {
         const newArr = [...prev];
         [newArr[index-1], newArr[index]] = [newArr[index], newArr[index-1]];
         return newArr;
       });
-      setIsReordering(false);
-    }, 150);
+    }, 0);
   };
 
   const handleMoveDown = (index: number) => {
-    if (index >= workouts.length - 1 || isReordering) return;
-    setIsReordering(true);
-    workoutRefs.current[index]?.animateMove(1, itemHeights[index+1] || 0);
-    workoutRefs.current[index+1]?.animateMove(-1, itemHeights[index] || 0);
+    if (index >= workouts.length - 1) return;
     setTimeout(() => {
       setWorkouts(prev => {
         const newArr = [...prev];
         [newArr[index], newArr[index+1]] = [newArr[index+1], newArr[index]];
         return newArr;
       });
-      setIsReordering(false);
-    }, 150);
+    }, 0);
   };
 
   if (loading && workouts.length === 0) {
@@ -552,7 +542,7 @@ export default function EditProgramScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable 
           onPress={() => router.back()}
           style={styles.backButton}
@@ -625,38 +615,34 @@ export default function EditProgramScreen() {
         </Pressable>
       </View>
 
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <ScrollView 
-          ref={scrollRef}
-          style={styles.scrollView}
-          contentContainerStyle={styles.workoutsList}
-          showsVerticalScrollIndicator={true}
-        >
-          {workouts.map((workout, index) => (
-            <DraggableWorkoutCard
-              key={workout.id}
-              ref={el => { if (el) workoutRefs.current[index] = el; }}
-              workout={workout}
-              index={index}
-              totalWorkouts={workouts.length}
-              onMoveUp={handleMoveUp}
-              onMoveDown={handleMoveDown}
-              onRemove={handleDeleteWorkout}
-              onPress={() => router.push(`/modals/workouts/${workout.template_id}`)}
-              onInfo={() => handleWorkoutInfo(workout)}
-              onLayout={event => updateItemHeight(index, event.nativeEvent.layout.height)}
-            />
-          ))}
+      <ScrollView 
+        ref={scrollRef}
+        style={styles.scrollView}
+        contentContainerStyle={styles.workoutsList}
+        showsVerticalScrollIndicator={true}
+      >
+        {workouts.map((workout, index) => (
+          <DraggableWorkoutCard
+            key={workout.id}
+            workout={workout}
+            index={index}
+            totalWorkouts={workouts.length}
+            onMoveUp={handleMoveUp}
+            onMoveDown={handleMoveDown}
+            onRemove={() => handleDeleteWorkout(workout.id)}
+            onPress={() => router.push(`/modals/workouts/${workout.template_id}`)}
+            onInfo={() => handleWorkoutInfo(workout)}
+          />
+        ))}
 
-          <Pressable 
-            style={styles.addWorkoutButton}
-            onPress={() => setShowWorkoutSelection(true)}
-          >
-            <Plus size={20} color="#ccfbf1" />
-            <Text style={styles.addWorkoutText}>Add Workout</Text>
-          </Pressable>
-        </ScrollView>
-      </GestureHandlerRootView>
+        <Pressable 
+          style={styles.addWorkoutButton}
+          onPress={() => setShowWorkoutSelection(true)}
+        >
+          <Plus size={20} color="#ccfbf1" />
+          <Text style={styles.addWorkoutText}>Add Workout</Text>
+        </Pressable>
+      </ScrollView>
 
       {error && (
         <Animated.View 
@@ -754,9 +740,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
   },
   header: {
-    // @ts-ignore - Style incompatibility, ignore for now
     padding: 24,
-    paddingTop: Platform.OS === 'web' ? 40 : 24,
     backgroundColor: '#021a19',
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',
@@ -765,16 +749,13 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   backButton: {
-    // @ts-ignore - Style incompatibility, ignore for now
     marginRight: 16,
     marginTop: 4,
   },
   titleContainer: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flex: 1,
   },
   titleInput: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#ccfbf1',
@@ -787,11 +768,9 @@ const styles = StyleSheet.create({
     height: 40,
   },
   titleInputWeb: {
-    // @ts-ignore - Style incompatibility, ignore for now
     outlineStyle: 'none',
   },
   descriptionInput: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#ccfbf1',
@@ -803,11 +782,9 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   descriptionInputWeb: {
-    // @ts-ignore - Style incompatibility, ignore for now
     outlineStyle: 'none',
   },
   statsContainer: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
@@ -815,7 +792,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statsPanel: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flex: 1,
     flexDirection: 'row',
     backgroundColor: '#0d3d56',
@@ -825,7 +801,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleContainer: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
@@ -834,47 +809,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   switch: {
-    // @ts-ignore - Style incompatibility, ignore for now
     transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }],
     marginBottom: 0,
   },
   toggleText: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
     opacity: 1,
   },
   toggleTextActive: {
-    // @ts-ignore - Style incompatibility, ignore for now
   },
   statItem: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 0,
   },
   statValue: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#ccfbf1',
   },
   statLabel: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#5eead4',
   },
   statDivider: {
-    // @ts-ignore - Style incompatibility, ignore for now
     width: 1,
     height: 24,
     backgroundColor: '#115e59',
     marginHorizontal: 0,
   },
   infoButton: {
-    // @ts-ignore - Style incompatibility, ignore for now
     width: 40,
     height: 40,
     borderRadius: 12,
@@ -882,16 +849,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollView: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flex: 1,
   },
   workoutsList: {
-    // @ts-ignore - Style incompatibility, ignore for now
     padding: 16,
     paddingBottom: Platform.OS === 'ios' ? 140 : 120,
   },
   addWorkoutButton: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -902,14 +866,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   addWorkoutText: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
     marginLeft: 8,
   },
   errorMessage: {
-    // @ts-ignore - Style incompatibility, ignore for now
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 160 : 140,
     left: 16,
@@ -920,13 +882,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    // @ts-ignore - Style incompatibility, ignore for now
     color: '#ef4444',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
   },
   bottomButtonContainer: {
-    // @ts-ignore - Style incompatibility, ignore for now
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     bottom: 24,
     left: 24,
@@ -938,7 +898,6 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   deleteButton: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -963,13 +922,11 @@ const styles = StyleSheet.create({
     }),
   },
   deleteButtonText: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ef4444',
   },
   saveButton: {
-    // @ts-ignore - Style incompatibility, ignore for now
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -994,13 +951,11 @@ const styles = StyleSheet.create({
     }),
   },
   saveButtonText: {
-    // @ts-ignore - Style incompatibility, ignore for now
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#021a19',
   },
   saveButtonDisabled: {
-    // @ts-ignore - Style incompatibility, ignore for now
     opacity: 0.7,
   },
 });

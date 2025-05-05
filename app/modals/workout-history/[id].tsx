@@ -7,6 +7,7 @@ import WorkoutStatsCard from '@/components/WorkoutStatsCard';
 import DeleteWorkoutConfirmation from '@/components/DeleteWorkoutConfirmation';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function WorkoutDetailModal() {
   const router = useRouter();
@@ -19,6 +20,9 @@ export default function WorkoutDetailModal() {
   const [workoutData, setWorkoutData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
+  
+  // Get safe area insets
+  const insets = useSafeAreaInsets();
   
   useEffect(() => {
     if (id) {
@@ -303,7 +307,7 @@ export default function WorkoutDetailModal() {
         }} />
         
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
           <Pressable onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#ccfbf1" />
           </Pressable>
@@ -331,7 +335,7 @@ export default function WorkoutDetailModal() {
         }} />
         
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
           <Pressable onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#ccfbf1" />
           </Pressable>
@@ -362,7 +366,7 @@ export default function WorkoutDetailModal() {
       }} />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable onPress={handleBack} style={styles.backButton} disabled={deleteLoading}>
           <Ionicons name="arrow-back" size={24} color={deleteLoading ? '#4b5563' : '#ccfbf1'} />
         </Pressable>
@@ -439,7 +443,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 24,
     paddingBottom: 16,
     backgroundColor: '#042f2e',
     borderBottomWidth: 1,

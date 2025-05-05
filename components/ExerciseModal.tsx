@@ -233,202 +233,235 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
     }
   };
 
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      onRequestClose={onClose}
-      animationType="fade"
-    >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Exercise selection</Text>
-              <Pressable 
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
-            </View>
+  const renderContent = () => (
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Exercise selection</Text>
+          <Pressable 
+            onPress={onClose}
+            style={styles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <X size={24} color="#5eead4" />
+          </Pressable>
+        </View>
 
-            <View style={styles.searchContainer}>
-              <Search size={20} color="#5eead4" />
-              <TextInput
-                style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
-                placeholder="Search exercises..."
-                placeholderTextColor="#5eead4"
-                value={searchQuery}
-                onChangeText={handleSearch}
-              />
-            </View>
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#5eead4" />
+          <TextInput
+            style={[styles.searchInput, Platform.OS === 'web' && styles.searchInputWeb]}
+            placeholder="Search exercises..."
+            placeholderTextColor="#5eead4"
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+        </View>
 
-            <View style={styles.categoryContainer}>
-              <CategoryFilter 
-                selectedCategory={selectedCategory}
-                onCategoryChange={handleCategoryChange}
-              />
-            </View>
+        <View style={styles.categoryContainer}>
+          <CategoryFilter 
+            selectedCategory={selectedCategory}
+            onCategoryChange={handleCategoryChange}
+          />
+        </View>
 
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.muscleGroupsScroll}
-              contentContainerStyle={styles.muscleGroupsContent}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.muscleGroupsScroll}
+          contentContainerStyle={styles.muscleGroupsContent}
+        >
+          {muscleGroups.map((muscle) => (
+            <Pressable
+              key={muscle}
+              style={[
+                styles.muscleGroupButton,
+                selectedMuscle === muscle && styles.selectedMuscleGroup
+              ]}
+              onPress={() => handleMuscleSelect(muscle)}
             >
-              {muscleGroups.map((muscle) => (
+              <Text style={[
+                styles.muscleGroupText,
+                selectedMuscle === muscle && styles.selectedMuscleGroupText
+              ]}>
+                {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView 
+          style={styles.exercisesList}
+          contentContainerStyle={styles.exercisesListContent}
+        >
+          {loading ? (
+            <ActivityIndicator size="large" color="#14b8a6" style={{ marginTop: 20 }}/>
+          ) : error ? (
+             <View style={styles.centeredMessage}>
+               <Text style={styles.errorText}>{error}</Text>
+               <Pressable style={styles.retryButton} onPress={fetchExercises}>
+                 <Text style={styles.retryButtonText}>Retry</Text>
+               </Pressable>
+             </View>
+          ) : filteredExercises.length === 0 ? (
+            <View style={styles.centeredMessage}>
+              <Text style={styles.statusText}>
+                {searchQuery || selectedMuscle ? 'No matching exercises found' : 
+                 selectedCategory === 'favorite' ? 'No favorite exercises yet' :
+                 selectedCategory === 'frequent' ? 'No frequent exercises recorded yet' :
+                 'No exercises found for this category'}
+              </Text>
+            </View>
+          ) : (
+            filteredExercises.map((exercise) => {
+              const isSelected = selectedExerciseIds.some(item => item.id === exercise.id);
+              return (
                 <Pressable
-                  key={muscle}
-                  style={[
-                    styles.muscleGroupButton,
-                    selectedMuscle === muscle && styles.selectedMuscleGroup
-                  ]}
-                  onPress={() => handleMuscleSelect(muscle)}
+                  key={exercise.id}
+                  style={styles.exerciseItemContainer}
+                  onPress={() => toggleExerciseSelection(exercise.id)}
                 >
-                  <Text style={[
-                    styles.muscleGroupText,
-                    selectedMuscle === muscle && styles.selectedMuscleGroupText
-                  ]}>
-                    {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <ScrollView 
-              style={styles.exercisesList}
-              contentContainerStyle={styles.exercisesListContent}
-            >
-              {loading ? (
-                <ActivityIndicator size="large" color="#14b8a6" style={{ marginTop: 20 }}/>
-              ) : error ? (
-                 <View style={styles.centeredMessage}>
-                   <Text style={styles.errorText}>{error}</Text>
-                   <Pressable style={styles.retryButton} onPress={fetchExercises}>
-                     <Text style={styles.retryButtonText}>Retry</Text>
-                   </Pressable>
-                 </View>
-              ) : filteredExercises.length === 0 ? (
-                <View style={styles.centeredMessage}>
-                  <Text style={styles.statusText}>
-                    {searchQuery || selectedMuscle ? 'No matching exercises found' : 
-                     selectedCategory === 'favorite' ? 'No favorite exercises yet' :
-                     selectedCategory === 'frequent' ? 'No frequent exercises recorded yet' :
-                     'No exercises found for this category'}
-                  </Text>
-                </View>
-              ) : (
-                filteredExercises.map((exercise) => {
-                  const isSelected = selectedExerciseIds.some(item => item.id === exercise.id);
-                  return (
-                    <Pressable
-                      key={exercise.id}
-                      style={styles.exerciseItemContainer}
-                      onPress={() => toggleExerciseSelection(exercise.id)}
-                    >
-                      <Animated.View 
-                        style={[
-                          styles.exerciseItem,
-                          isSelected && styles.exerciseItemSelected
-                        ]}
-                        entering={FadeIn.duration(200)}
-                        exiting={FadeOut.duration(200)}
-                      >
-                        <View style={styles.exerciseContent}>
-                          <View style={styles.exerciseImagePlaceholder}>
-                            <Text style={styles.exerciseImageText}>
-                              {exercise.name ? exercise.name.charAt(0).toUpperCase() : ''}
-                            </Text>
-                          </View>
-                          <View style={styles.exerciseInfo}>
-                            <Text 
-                              style={styles.exerciseName}
-                              numberOfLines={1}
-                            >
-                              {exercise.name}
-                            </Text>
-                            <View style={styles.muscleTags}>
-                              {exercise.muscle_primary && exercise.muscle_primary.length > 0 ? (
-                                exercise.muscle_primary.slice(0, 3).map((muscle, index) => (
-                                  <View key={`primary-${index}`} style={styles.muscleTag}>
-                                    <Text style={styles.muscleTagText}>
-                                      {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
-                                    </Text>
-                                  </View>
-                                ))
-                              ) : (
-                                <View style={styles.muscleTag}>
-                                  <Text style={styles.muscleTagText}>No muscles</Text>
-                                </View>
-                              )}
+                  <Animated.View 
+                    style={[
+                      styles.exerciseItem,
+                      isSelected && styles.exerciseItemSelected
+                    ]}
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(200)}
+                  >
+                    <View style={styles.exerciseContent}>
+                      <View style={styles.exerciseImagePlaceholder}>
+                        <Text style={styles.exerciseImageText}>
+                          {exercise.name ? exercise.name.charAt(0).toUpperCase() : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.exerciseInfo}>
+                        <Text 
+                          style={styles.exerciseName}
+                          numberOfLines={1}
+                        >
+                          {exercise.name}
+                        </Text>
+                        <View style={styles.muscleTags}>
+                          {exercise.muscle_primary && exercise.muscle_primary.length > 0 ? (
+                            exercise.muscle_primary.slice(0, 3).map((muscle, index) => (
+                              <View key={`primary-${index}`} style={styles.muscleTag}>
+                                <Text style={styles.muscleTagText}>
+                                  {muscle ? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace('_', ' ') : ''}
+                                </Text>
+                              </View>
+                            ))
+                          ) : (
+                            <View style={styles.muscleTag}>
+                              <Text style={styles.muscleTagText}>No muscles</Text>
                             </View>
-                          </View>
-                          <View style={styles.checkmarkContainer}>
-                            {isSelected && (
-                              <Animated.View 
-                                style={styles.checkmark}
-                                entering={FadeIn.duration(200)}
-                                exiting={FadeOut.duration(200)}
-                              >
-                                <Check size={20} color="#14b8a6" />
-                              </Animated.View>
-                            )}
-                          </View>
+                          )}
                         </View>
-                      </Animated.View>
-                    </Pressable>
-                  );
-                })
-              )}
-            </ScrollView>
+                      </View>
+                      <View style={styles.checkmarkContainer}>
+                        {isSelected && (
+                          <Animated.View 
+                            style={styles.checkmark}
+                            entering={FadeIn.duration(200)}
+                            exiting={FadeOut.duration(200)}
+                          >
+                            <Check size={20} color="#14b8a6" />
+                          </Animated.View>
+                        )}
+                      </View>
+                    </View>
+                  </Animated.View>
+                </Pressable>
+              );
+            })
+          )}
+        </ScrollView>
 
-            <View style={styles.bottomBar}>
-              <Pressable 
-                style={[
-                  styles.addButton,
-                  selectedExerciseIds.length === 0 && styles.addButtonDisabled
-                ]}
-                onPress={handleConfirm}
-                disabled={selectedExerciseIds.length === 0}
-              >
-                <Text style={[
-                  styles.addButtonText,
-                  selectedExerciseIds.length === 0 && styles.addButtonTextDisabled
-                ]}>
-                  Add {selectedExerciseIds.length} Exercise{selectedExerciseIds.length !== 1 ? 's' : ''}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+        <View style={styles.bottomBar}>
+          <Pressable 
+            style={[
+              styles.addButton,
+              selectedExerciseIds.length === 0 && styles.addButtonDisabled
+            ]}
+            onPress={handleConfirm}
+            disabled={selectedExerciseIds.length === 0}
+          >
+            <Text style={[
+              styles.addButtonText,
+              selectedExerciseIds.length === 0 && styles.addButtonTextDisabled
+            ]}>
+              Add {selectedExerciseIds.length} Exercise{selectedExerciseIds.length !== 1 ? 's' : ''}
+            </Text>
+          </Pressable>
         </View>
       </View>
-    </Modal>
+    </View>
+  );
+
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        onRequestClose={onClose}
+        animationType="fade"
+      >
+        <View style={styles.iosOverlay}> 
+          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          {renderContent()} 
+        </View>
+      </Modal>
+    );
+  }
+
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <View style={styles.androidFakeModalWrapper}>
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View style={styles.androidCenteringContainer}>
+         {renderContent()} 
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  iosOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
-  } as ViewStyle,
+    alignItems: 'center',
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(2, 26, 25, 0.8)',
-  } as ViewStyle,
+  },
+  androidFakeModalWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  androidCenteringContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
   modalContainer: {
     backgroundColor: '#031A19',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     height: '90%',
+    width: '100%',
     overflow: 'hidden',
-  } as ViewStyle,
+  },
   modalContent: {
     flex: 1,
-  } as ViewStyle,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -438,15 +471,15 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#115e59',
-  } as ViewStyle,
+  },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
-  } as TextStyle,
+  },
   closeButton: {
     padding: 4,
-  } as ViewStyle,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -454,7 +487,7 @@ const styles = StyleSheet.create({
     margin: 16,
     borderRadius: 12,
     padding: 12,
-  } as ViewStyle,
+  },
   searchInput: {
     flex: 1,
     color: '#ccfbf1',
@@ -462,66 +495,65 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     paddingVertical: Platform.OS === 'web' ? 0 : undefined,
-  } as TextStyle,
+  },
   searchInputWeb: {
-    outlineStyle: 'none',
-  } as TextStyle,
+  },
   categoryContainer: {
     paddingHorizontal: 16,
     marginBottom: 8,
-  } as ViewStyle,
+  },
   muscleGroupsScroll: {
     maxHeight: 40,
     marginBottom: 12,
-  } as ViewStyle,
+  },
   muscleGroupsContent: {
     paddingHorizontal: 16,
     gap: 8,
     alignItems: 'center',
-  } as ViewStyle,
+  },
   muscleGroupButton: {
     backgroundColor: '#115e59',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-  } as ViewStyle,
+  },
   selectedMuscleGroup: {
     backgroundColor: '#14b8a6',
-  } as ViewStyle,
+  },
   muscleGroupText: {
     color: '#5eead4',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-  } as TextStyle,
+  },
   selectedMuscleGroupText: {
     color: '#042f2e',
-  } as TextStyle,
+  },
   exercisesList: {
     flex: 1,
-  } as ViewStyle,
+  },
   exercisesListContent: {
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: Platform.OS === 'ios' ? 100 : 80,
-  } as ViewStyle,
+  },
   exerciseItemContainer: {
     marginBottom: 12,
-  } as ViewStyle,
+  },
   exerciseItem: {
     backgroundColor: '#115e59',
     borderRadius: 12,
     overflow: 'hidden',
-  } as ViewStyle,
+  },
   exerciseItemSelected: {
     backgroundColor: '#134e4a',
     borderWidth: 1,
     borderColor: '#14b8a6',
-  } as ViewStyle,
+  },
   exerciseContent: {
     flexDirection: 'row',
     padding: 16,
     alignItems: 'center',
-  } as ViewStyle,
+  },
   exerciseImagePlaceholder: {
     width: 48,
     height: 48,
@@ -529,45 +561,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d9488',
     justifyContent: 'center',
     alignItems: 'center',
-  } as ViewStyle,
+  },
   exerciseImageText: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#f0fdfa',
-  } as TextStyle,
+  },
   exerciseInfo: {
     flex: 1,
     marginLeft: 12,
     marginRight: 12,
-  } as ViewStyle,
+  },
   exerciseName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
     marginBottom: 6,
-  } as TextStyle,
+  },
   muscleTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-  } as ViewStyle,
+  },
   muscleTag: {
     backgroundColor: '#0d9488',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-  } as ViewStyle,
+  },
   muscleTagText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#f0fdfa',
-  } as TextStyle,
+  },
   checkmarkContainer: {
     width: 24,
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-  } as ViewStyle,
+  },
   checkmark: {
     width: 24,
     height: 24,
@@ -575,39 +607,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdfa',
     justifyContent: 'center',
     alignItems: 'center',
-  } as ViewStyle,
+  },
   statusText: {
     color: '#5eead4',
     textAlign: 'center',
     marginTop: 20,
     fontFamily: 'Inter-Regular',
     fontSize: 16,
-  } as TextStyle,
+  },
   centeredMessage: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
     minHeight: 150,
-  } as ViewStyle,
+  },
   errorText: {
     color: '#ef4444',
     textAlign: 'center',
     marginBottom: 16,
     fontFamily: 'Inter-Medium',
     fontSize: 16,
-  } as TextStyle,
+  },
   retryButton: {
     backgroundColor: '#14b8a6',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
-  } as ViewStyle,
+  },
   retryButtonText: {
     color: '#042f2e',
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-  } as TextStyle,
+  },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -618,24 +650,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#031A19',
     borderTopWidth: 1,
     borderTopColor: '#115e59',
-  } as ViewStyle,
+  },
   addButton: {
     backgroundColor: '#14b8a6',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-  } as ViewStyle,
+  },
   addButtonDisabled: {
     backgroundColor: '#115e59',
-  } as ViewStyle,
+  },
   addButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#021a19',
-  } as TextStyle,
+  },
   addButtonTextDisabled: {
     color: '#5eead4',
-  } as TextStyle,
+  },
 });
 
 type Styles = typeof styles;
