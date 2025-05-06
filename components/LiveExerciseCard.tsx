@@ -413,13 +413,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   setHeaderCell: {
-    marginBottom: 8,
+    marginBottom: 0,
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     textAlign: 'center',
-    height: 24,
-    lineHeight: 24,
+    lineHeight: 20,
   },
   setNumberCell: {
     width: 30,
