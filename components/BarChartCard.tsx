@@ -62,6 +62,7 @@ export default function BarChartCard({
   const [selectedBarIndex, setSelectedBarIndex] = useState<number | null>(null);
   const [barLayouts, setBarLayouts] = useState<Array<LayoutRectangle | null>>([]);
   const [scrollOffset, setScrollOffset] = useState(0);
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   
   // ScrollView refs
   const scrollViewRef = useRef<ScrollView>(null);
@@ -71,10 +72,18 @@ export default function BarChartCard({
   // Add state to track tooltip width for adaptive sizing
   const [tooltipWidth, setTooltipWidth] = useState(DEFAULT_TOOLTIP_WIDTH);
   
-  // Reset selected bar when period changes
+  // Reset selected bar and tooltip visibility when period changes
   useEffect(() => {
     setSelectedBarIndex(null);
+    setIsTooltipVisible(false);
   }, [period]);
+  
+  // Step 2b: Log when data prop changes
+  /*
+  useEffect(() => {
+    console.log(`[Tooltip Debug] useEffect[data]: data prop changed. Length: ${data?.length || 0}`);
+  }, [data]);
+  */
   
   // Process data for display
   const fullRangeData = useMemo(() => 
@@ -163,25 +172,60 @@ export default function BarChartCard({
     return { yTicks: ticks, adjustedMax };
   }, [maxValue, segmentCount, customYAxisTicks]);
   
-  // Initialize bar layouts array
-  useEffect(() => {
-    setBarLayouts(new Array(formattedData.length).fill(null));
-  }, [formattedData.length]);
-  
-  // Handle bar selection
+  // Handle bar selection - Step 1: Fix deselection logic
   const handleBarPress = (index: number) => {
-    setSelectedBarIndex(prev => prev === index ? null : index);
+    // console.log(`[Tooltip Debug] handleBarPress: Pressed bar index ${index}. Current selected: ${selectedBarIndex}`);
+    // Correctly check if the pressed bar is the currently selected one
+    if (selectedBarIndex === index) {
+        // Deselecting
+        // console.log(`[Tooltip Debug] handleBarPress: Deselecting bar ${index}`); // Correct log placement
+        setSelectedBarIndex(null);
+        setIsTooltipVisible(false);
+    } else {
+        // Selecting a new bar
+        // console.log(`[Tooltip Debug] handleBarPress: Selecting bar ${index}`);
+        setSelectedBarIndex(index);
+        setIsTooltipVisible(false); // Hide tooltip until layout is confirmed by useEffect
+    }
   };
   
   // Store bar layout information when rendered
   const handleBarLayout = (index: number, event: LayoutChangeEvent) => {
     const layout = event.nativeEvent.layout;
+    // console.log(`[Tooltip Debug] handleBarLayout: Layout for bar ${index}:`, layout);
     setBarLayouts(prev => {
       const newLayouts = [...prev];
+      // Step 3: Force update on every layout measurement (remove optimization check)
+      // console.log(`[Tooltip Debug] handleBarLayout: Forcing layout state update for bar ${index}`);
       newLayouts[index] = layout;
       return newLayouts;
     });
   };
+  
+  // Step 3: Use useEffect to show tooltip only when layout is ready
+  useEffect(() => {
+    // console.log(`[Tooltip Debug] useEffect[selectedBarIndex, barLayouts]: Running. selectedBarIndex=${selectedBarIndex}`);
+    // Check if selectedBarIndex is not null before accessing barLayouts for logging
+    /*
+    if (selectedBarIndex !== null) {
+      console.log(`[Tooltip Debug] useEffect: Layout for selected bar ${selectedBarIndex}:`, barLayouts[selectedBarIndex]);
+    }
+    */
+
+    // Check if layout is available for the selected bar
+    const layoutReady = selectedBarIndex !== null && !!barLayouts[selectedBarIndex];
+
+    if (layoutReady) {
+        // console.log(`[Tooltip Debug] useEffect: Conditions met for bar ${selectedBarIndex}. Setting isTooltipVisible=true`);
+        // Layout is ready for the selected bar
+        setIsTooltipVisible(true);
+    } else {
+        // console.log(`[Tooltip Debug] useEffect: Conditions not met (selectedBarIndex=${selectedBarIndex}, layout ready=${layoutReady}). Setting isTooltipVisible=false`);
+        // No bar selected or layout not ready/available
+        setIsTooltipVisible(false);
+    }
+    // Add barLayouts[selectedBarIndex] to dependencies to react to specific layout changes? No, triggers too often.
+  }, [selectedBarIndex, barLayouts]); // Dependencies: selection and layouts
   
   // Calculate bar container width and ideal bar width
   const effectiveChartWidth = chartWidth - Y_AXIS_WIDTH;
@@ -423,7 +467,9 @@ export default function BarChartCard({
                         style={[
                           styles.xAxisLabel,
                           // Make 14D displayed labels wider
-                          is14DDisplayedLabel && { width: idealBarWidth * 3 }
+                          is14DDisplayedLabel && { width: idealBarWidth * 3 },
+                          // Reduce font size on Android for 7D period
+                          Platform.OS === 'android' && period === '7D' && { fontSize: 9 }
                         ]}
                       >
                         {formatXAxisLabel(item, index)}
@@ -438,49 +484,66 @@ export default function BarChartCard({
       </View>
       
       {/* Tooltip rendered outside chart - with improved positioning */}
-      {selectedBarIndex !== null && barLayouts[selectedBarIndex] && (
-        <View 
-          style={[
-            styles.tooltip,
-            {
-              position: 'absolute',
-              // Add Y_AXIS_WIDTH to account for the Y-axis space
-              left: Y_AXIS_WIDTH + (barLayouts[selectedBarIndex]?.x || 0) + (idealBarWidth / 2) - (tooltipWidth / 2),
-              top: chartContainerHeight - (adjustedMax > 0 ? (((formattedData[selectedBarIndex]?.value || 0) / adjustedMax) * chartHeight) : 0) - 52,
-              minWidth: tooltipWidth, // Use measured or default width
-            }
-          ]}
-          onLayout={(e) => {
-            // Measure the actual content width and update if needed
-            const {width} = e.nativeEvent.layout;
-            if (width > tooltipWidth && width > DEFAULT_TOOLTIP_WIDTH) {
-              setTooltipWidth(width);
-            }
-          }}
-        >
-          <View style={styles.tooltipContent}>
-            <View style={styles.tooltipInnerContent}>
-              <Text style={styles.tooltipLabel}>
-                {formatTooltipLabel(formattedData[selectedBarIndex]?.label || '', selectedBarIndex)}:
-              </Text>
-              <View style={styles.tooltipValueContainer}>
-                <Text style={styles.tooltipValue}>
-                  {formatTooltipValue(formattedData[selectedBarIndex]?.value || 0)}
-                </Text>
-                {/* Dynamic unit display based on context */}
-                {tooltipValueSuffix && (
-                  <Text style={styles.tooltipUnit}>{tooltipValueSuffix}</Text>
-                )}
-                {/* Keep existing suffix for min but only if not using the new formatting */}
-                {!tooltipValueSuffix && yAxisSuffix && yAxisSuffix !== 'min' && (
-                  <Text style={styles.tooltipUnit}>{yAxisSuffix}</Text>
-                )}
+      {(() => {
+        // Log values used in the render condition
+        /*
+        const layoutAvailable = selectedBarIndex !== null && !!barLayouts[selectedBarIndex];
+        console.log(`[Tooltip Debug] Render check: isTooltipVisible=${isTooltipVisible}, selectedBarIndex=${selectedBarIndex}, layoutAvailable=${layoutAvailable}`);
+        */
+        
+        // Original render condition
+        if (isTooltipVisible && selectedBarIndex !== null && barLayouts[selectedBarIndex]) {
+          const selectedLayout = barLayouts[selectedBarIndex];
+          const tooltipTop = chartContainerHeight - (adjustedMax > 0 ? (((formattedData[selectedBarIndex]?.value || 0) / adjustedMax) * chartHeight) : 0) - 52;
+          const tooltipLeft = Y_AXIS_WIDTH + (selectedLayout?.x || 0) + (idealBarWidth / 2) - (tooltipWidth / 2);
+          // console.log(`[Tooltip Debug] Rendering Tooltip for bar ${selectedBarIndex}. Calculated Position: top=${tooltipTop}, left=${tooltipLeft}`);
+          
+          return (
+            <View 
+              style={[
+                styles.tooltip,
+                {
+                  position: 'absolute',
+                  left: tooltipLeft,
+                  top: tooltipTop,
+                  minWidth: tooltipWidth, // Use measured or default width
+                }
+              ]}
+              onLayout={(e) => {
+                // Measure the actual content width and update if needed
+                const {width} = e.nativeEvent.layout;
+                if (width > tooltipWidth && width > DEFAULT_TOOLTIP_WIDTH) {
+                  // console.log(`[Tooltip Debug] Tooltip measured width ${width}, updating state.`);
+                  setTooltipWidth(width);
+                }
+              }}
+            >
+              <View style={styles.tooltipContent}>
+                <View style={styles.tooltipInnerContent}>
+                  <Text style={styles.tooltipLabel}>
+                    {formatTooltipLabel(formattedData[selectedBarIndex]?.label || '', selectedBarIndex)}:
+                  </Text>
+                  <View style={styles.tooltipValueContainer}>
+                    <Text style={styles.tooltipValue}>
+                      {formatTooltipValue(formattedData[selectedBarIndex]?.value || 0)}
+                    </Text>
+                    {/* Dynamic unit display based on context */}
+                    {tooltipValueSuffix && (
+                      <Text style={styles.tooltipUnit}>{tooltipValueSuffix}</Text>
+                    )}
+                    {/* Keep existing suffix for min but only if not using the new formatting */}
+                    {!tooltipValueSuffix && yAxisSuffix && yAxisSuffix !== 'min' && (
+                      <Text style={styles.tooltipUnit}>{yAxisSuffix}</Text>
+                    )}
+                  </View>
+                </View>
               </View>
+              <View style={styles.tooltipArrow} />
             </View>
-          </View>
-          <View style={styles.tooltipArrow} />
-        </View>
-      )}
+          );
+        }
+        return null; // Return null if tooltip should not be rendered
+      })()}
     </ChartCard>
   );
 }

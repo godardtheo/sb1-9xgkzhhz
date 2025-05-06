@@ -1,5 +1,5 @@
 import React from 'react'; // Added React import to fix the "React is not defined" error
-import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Platform } from 'react-native';
 import { X, Volume2, VolumeX } from 'lucide-react-native';
 import { useState } from 'react';
 import Animated, {
@@ -55,91 +55,129 @@ export default function RestTimerModal({
     };
   });
 
-  return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      onRequestClose={onClose}
-      animationType="none"
+  // Common content renderer
+  const renderContent = () => (
+    <Animated.View
+      style={[styles.modalContainer, animatedStyle]}
     >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Animated.View
-          style={[styles.modalContainer, animatedStyle]}
-        >
-          <View style={styles.handle} />
-
-          <View style={styles.header}>
-            <Text style={styles.title}>Rest Timer</Text>
-            
-            <View style={styles.headerActions}>
-              <Pressable
-                onPress={onSoundToggle}
-                style={styles.soundToggle}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                {playSoundOnFinish ? (
-                  <Volume2 size={22} color="#5eead4" />
-                ) : (
-                  <VolumeX size={22} color="#5eead4" />
-                )}
-              </Pressable>
-              
-              <Pressable
-                onPress={onClose}
-                style={styles.closeButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#5eead4" />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.timeGrid}>
-            {restTimeOptions.map((option) => (
-              <Pressable
-                key={option.value}
-                style={[
-                  styles.timeOption,
-                  currentTime === option.value && styles.selectedTimeOption,
-                ]}
-                onPress={() => onTimeSelected(option.value)}
-              >
-                <Text
-                  style={[
-                    styles.timeText,
-                    currentTime === option.value && styles.selectedTimeText,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </Animated.View>
+      <View style={styles.handle} />
+      <View style={styles.header}>
+        <Text style={styles.title}>Rest Timer</Text>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={onSoundToggle}
+            style={styles.soundToggle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            {playSoundOnFinish ? (
+              <Volume2 size={22} color="#5eead4" />
+            ) : (
+              <VolumeX size={22} color="#5eead4" />
+            )}
+          </Pressable>
+          <Pressable
+            onPress={onClose}
+            style={styles.closeButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <X size={24} color="#5eead4" />
+          </Pressable>
         </View>
       </View>
-    </Modal>
+      <View style={styles.timeGrid}>
+        {restTimeOptions.map((option) => (
+          <Pressable
+            key={option.value}
+            style={[
+              styles.timeOption,
+              currentTime === option.value && styles.selectedTimeOption,
+            ]}
+            onPress={() => onTimeSelected(option.value)}
+          >
+            <Text
+              style={[
+                styles.timeText,
+                currentTime === option.value && styles.selectedTimeText,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </Animated.View>
+  );
+
+  // iOS uses the standard Modal
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent={true}
+        onRequestClose={onClose}
+        animationType="none" // Keep animation none for iOS original behavior
+      >
+        <View style={styles.iosOverlay}> 
+          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          {renderContent()} 
+        </View>
+      </Modal>
+    );
+  }
+
+  // Android renders a View simulating a modal overlay
+  if (!visible) {
+    return null; // Don't render anything if not visible
+  }
+
+  return (
+    <View style={styles.androidFakeModalWrapper}>
+      {/* Backdrop for Android fake modal */}
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Centering container for Android (aligned bottom) */}
+      <View style={styles.androidCenteringContainer}>
+         {renderContent()} 
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  // --- iOS Specific Styles --- 
+  iosOverlay: { // Overlay for iOS Modal
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
+    justifyContent: 'flex-end', // Aligned bottom
+    alignItems: 'center',
   },
-  backdrop: {
+  backdrop: { // Used by both, but context differs
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(2, 26, 25, 0.5)',
+    backgroundColor: 'rgba(2, 26, 25, 0.5)', // Original backdrop color
   },
-  modalContainer: {
+
+  // --- Android Specific Styles ---
+  androidFakeModalWrapper: { // Covers the whole screen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000, // High zIndex to be on top
+  },
+  androidCenteringContainer: { // Centers the modal content within the wrapper
+    flex: 1,
+    justifyContent: 'flex-end', // Aligned bottom
+    alignItems: 'center',
+  },
+
+  // --- Common Styles --- 
+  modalContainer: { // The visible modal box
     backgroundColor: '#115e59',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: 'hidden',
-    paddingBottom: 24, // Reduced padding
+    paddingBottom: 24,
+    width: '100%', // Takes full width of its container
+    // Removed positioning/sizing styles handled by parent
   },
   handle: {
     width: 40,
@@ -155,10 +193,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 12, // Reduced padding
+    paddingVertical: 12, 
   },
   title: {
-    fontSize: 18, // Slightly smaller title
+    fontSize: 18, 
     fontFamily: 'Inter-SemiBold',
     color: '#ccfbf1',
   },

@@ -176,35 +176,99 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
     });
   }, [workouts]); // Depend only on workouts
 
-  // --- Calculate custom Y-axis ticks --- 
+  // Step 1: Pre-aggregate data based on period for scale calculation
+  const aggregatedDataForScale = useMemo(() => {
+    if (!chartData || chartData.length === 0) {
+      return [];
+    }
+    
+    const sortedData = [...chartData].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    switch (period) {
+      case '1M':
+        const weeklyData: {[key: string]: number} = {};
+        sortedData.forEach(item => {
+          const date = new Date(item.date);
+          const weekNumber = Math.floor(date.getDate() / 7) + 1;
+          const weekLabel = `W${weekNumber}`;
+          weeklyData[weekLabel] = (weeklyData[weekLabel] || 0) + item.value;
+        });
+        return Object.entries(weeklyData).map(([label, value]) => ({ label, value }));
+        
+      case '12M':
+      case 'ALL':
+        const monthlyData: {[key: string]: number} = {};
+        sortedData.forEach(item => {
+          const date = new Date(item.date);
+          const monthLabel = date.toLocaleString('default', { month: 'short' }).substring(0, 3);
+          monthlyData[monthLabel] = (monthlyData[monthLabel] || 0) + item.value;
+        });
+        return Object.entries(monthlyData).map(([label, value]) => ({ label, value }));
+
+      case '7D':
+      case '14D':
+      default:
+        // For daily views, no aggregation needed for scale calculation
+        return sortedData.map(item => ({ label: item.date, value: item.value }));
+    }
+  }, [chartData, period]);
+
+  // --- Calculate custom Y-axis ticks based on AGGREGATED data ---
   const { yAxisTicks, maxDurationValue } = useMemo(() => {
-    if (chartData.length === 0) {
+    // Use aggregatedDataForScale to find the true maximum value to display
+    if (aggregatedDataForScale.length === 0) {
       return { yAxisTicks: [0], maxDurationValue: 0 }; // Default for empty data
     }
 
-    // Find the maximum duration in the current chart data
-    const maxDuration = Math.max(...chartData.map(d => d.value), 0);
+    // Find the maximum duration in the AGGREGATED data
+    const maxAggregatedDuration = Math.max(...aggregatedDataForScale.map(d => d.value), 0);
 
-    // Determine tick interval based on max duration
-    const tickInterval = maxDuration <= 45 ? 5 : 10;
-
-    // Calculate the highest tick value needed (multiple of interval >= maxDuration)
-    const maxTickValue = Math.ceil(maxDuration / tickInterval) * tickInterval;
+    // --- New Logic for Smart Interval Calculation (Target ~8 intervals / 9 ticks) ---
+    let niceInterval = 10; // Default interval
+    const targetIntervals = 8;
+    const niceIntervals = [1, 2, 5, 10, 15, 20, 30, 60, 90, 120, 180, 240, 300, 360]; // Sensible minute intervals
     
-    // Handle the case where maxTickValue is 0 (e.g., all workouts are 0 min)
-    if (maxTickValue === 0) {
-        return { yAxisTicks: [0], maxDurationValue: 0 };
+    if (maxAggregatedDuration > 0) {
+      const rawInterval = maxAggregatedDuration / targetIntervals;
+      // Find the smallest nice interval >= rawInterval
+      niceInterval = niceIntervals.find(interval => interval >= rawInterval) || niceIntervals[niceIntervals.length - 1];
+      // If max duration is very large, ensure interval is at least 60 minutes
+      if (maxAggregatedDuration > 480 && niceInterval < 60) { // ~8 hours
+          niceInterval = 60;
+      }
     }
+    // --- End of New Logic ---
 
-    // Generate the ticks from 0 up to maxTickValue
+    // Calculate the highest tick value needed (multiple of the chosen niceInterval)
+    const maxTickValue = maxAggregatedDuration > 0 ? Math.ceil(maxAggregatedDuration / niceInterval) * niceInterval : niceInterval; // Ensure at least one interval if max is 0
+    
+    // Generate the ticks from 0 up to maxTickValue using the niceInterval
     const ticks: number[] = [];
-    for (let i = 0; i <= maxTickValue; i += tickInterval) {
-      ticks.push(i);
+    // Ensure maxTickValue is treated as a number for the loop condition
+    const numericMaxTickValue = Number(maxTickValue);
+    if (!isNaN(numericMaxTickValue)) {
+        for (let i = 0; i <= numericMaxTickValue; i += niceInterval) {
+            ticks.push(i);
+        }
+    } else {
+        // Fallback if calculation failed somehow
+        ticks.push(0);
+    }
+    // Ensure the maxTickValue itself is included if loop didn't reach it exactly
+    if (ticks[ticks.length - 1] < numericMaxTickValue && !isNaN(numericMaxTickValue)) {
+        // This check might be redundant due to ceil, but safer?
+        // Let's remove this, ceil should handle it.
     }
     
+    // Add Scale Debug log here (comparing against aggregated max)
+    console.log(`[Scale Debug - WorkoutDuration] Calculated maxDurationValue (used as adjustedMax): ${maxTickValue}, Actual Max AGGREGATED Value in Data: ${maxAggregatedDuration}`);
+    if (maxTickValue < maxAggregatedDuration) {
+      console.error(`[Scale Debug - WorkoutDuration] ERROR: maxDurationValue (${maxTickValue}) is LESS THAN actual max AGGREGATED value (${maxAggregatedDuration})!`);
+    }
+
     return { yAxisTicks: ticks, maxDurationValue: maxTickValue };
 
-  }, [chartData]); // Recalculate when chartData changes
+  }, [aggregatedDataForScale]); // Recalculate when aggregated data changes
 
   // Calculate metrics for display
   const totalWorkouts = workouts.length;
@@ -276,7 +340,7 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
         return `${hours}:${mins.toString().padStart(2, '0')}`; 
       }}
       yAxisLabelXOffset={32}
-      yAxisTicks={yAxisTicks} // Pass the calculated custom ticks
+      yAxisTicks={yAxisTicks}
     />
   );
 } 

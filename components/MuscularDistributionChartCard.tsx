@@ -66,6 +66,14 @@ const hslToHex = (h: number, s: number, l: number): string => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
+// Helper function to format muscle names for display
+const formatMuscleName = (name: string): string => {
+  if (!name) return '';
+  // Replace underscores and hyphens with spaces, then capitalize the first letter
+  const formatted = name.replace(/_/g, ' ').replace(/-/g, ' ');
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+};
+
 // Generate colors based on the number of data points
 const generateColors = (count: number): string[] => {
   if (count === 0) return [];
@@ -274,7 +282,7 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
   // Transform data for the pie chart
   const chartData: DataPoint[] = useMemo(() => {
     return muscleData.map((item, index) => ({
-      name: item.muscle.charAt(0).toUpperCase() + item.muscle.slice(1), // Capitalize first letter
+      name: formatMuscleName(item.muscle), // Use helper function
       value: item.sets,
       color: muscleColors[index],
     }));
@@ -286,7 +294,7 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
     
     // Get the muscle with the most sets (already sorted)
     const topMuscle = muscleData[0].muscle;
-    return topMuscle.charAt(0).toUpperCase() + topMuscle.slice(1); // Capitalize first letter
+    return formatMuscleName(topMuscle); // Use helper function
   }, [muscleData]);
 
   const leastTrainedMuscle = useMemo(() => {
@@ -294,7 +302,7 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
     
     // Get the muscle with the least sets (last in sorted array)
     const bottomMuscle = muscleData[muscleData.length - 1].muscle;
-    return bottomMuscle.charAt(0).toUpperCase() + bottomMuscle.slice(1); // Capitalize first letter
+    return formatMuscleName(bottomMuscle); // Use helper function
   }, [muscleData]);
 
   // Total number of sets across all muscles

@@ -37,7 +37,7 @@ type Exercise = {
   muscle: string;
   muscle_primary?: string[];
   muscle_secondary?: string[];
-  equipment?: string | string[];
+  equipment?: string | string[] | undefined;
   instructions?: string;
   video_url?: string;
   type?: string;
@@ -712,18 +712,24 @@ export default function LiveWorkoutScreen() {
     setExercises(exercises.filter((ex) => ex.id !== exerciseId));
   };
 
-  const handleExerciseSelection = (selectedExercises: any[]) => {
+  const handleExerciseSelection = async (selectedExercises: any[]) => {
     // Traite les exercices dans l'ordre exact de sélection
-    const newExercises: Exercise[] = selectedExercises.map(exercise => {
+    const newExercisesPromises = selectedExercises.map(async (exercise) => {
+      // Get previous performance for this exercise
+      const previousPerformance = await getPreviousPerformance(exercise.id);
+
       // Création des sets pour chaque exercice sélectionné
-      const exerciseSets = Array(4).fill(null).map(() => ({
-        id: uuid.v4() as string,
-        weight: '0',
-        reps: '0',
-        completed: false,
-        previousWeight: '0',
-        previousReps: '0',
-      }));
+      const exerciseSets = Array(4).fill(null).map((_, index) => {
+        const prevSet = previousPerformance[index] || {};
+        return {
+          id: uuid.v4() as string,
+          weight: prevSet.weight || '0',
+          reps: '',
+          completed: false,
+          previousWeight: prevSet.weight || '0',
+          previousReps: prevSet.reps || '0',
+        };
+      });
 
       // Gérer la compatibilité avec l'ancien format pour muscle_primary
       let muscle_primary = exercise.muscle_primary || [];
@@ -750,6 +756,9 @@ export default function LiveWorkoutScreen() {
         sets: exerciseSets,
       };
     });
+
+    // Wait for all promises to resolve
+    const newExercises = await Promise.all(newExercisesPromises);
 
     // Ajoute les nouveaux exercices à la fin de la liste existante, préservant l'ordre de sélection
     setExercises(prevExercises => [...prevExercises, ...newExercises]);

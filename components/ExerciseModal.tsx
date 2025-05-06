@@ -47,6 +47,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
       setSearchQuery('');
       setSelectedMuscle('');
       setSelectedCategory('all');
+      fetchExercises('all', '', '');
     } else {
       setExercises([]);
       setFilteredExercises([]);
@@ -61,15 +62,34 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
 
   useEffect(() => {
     if (visible) {
-      fetchExercises();
+      fetchExercises(selectedCategory, searchQuery, selectedMuscle);
     }
-  }, [selectedCategory, visible]);
+  }, [selectedCategory]);
 
   useEffect(() => {
-    filterExercises();
-  }, [searchQuery, selectedMuscle, exercises]);
+    if (visible && !loading) {
+      filterExercisesAndUpdateState();
+    }
+  }, [searchQuery, selectedMuscle, exercises, loading]);
 
-  const fetchExercises = async () => {
+  const filterExercisesAndUpdateState = () => {
+    let filtered = [...exercises];
+
+    if (searchQuery && searchQuery.length >= 1) {
+      filtered = filtered.filter(exercise =>
+        exercise.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (selectedMuscle) {
+      filtered = filtered.filter(exercise =>
+        exercise.muscle_primary?.includes(selectedMuscle)
+      );
+    }
+    setFilteredExercises(filtered);
+  };
+
+  const fetchExercises = async (category: CategoryOption, currentSearchQuery: string, currentSelectedMuscle: string) => {
     if (!visible) return;
 
     try {
@@ -99,12 +119,12 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
 
       let fetchedExercises: Exercise[] = [];
 
-      if (selectedCategory === 'all') {
+      if (category === 'all') {
         const { data, error } = await query.order('name');
         if (error) throw error;
         fetchedExercises = data || [];
       }
-      else if (selectedCategory === 'favorite') {
+      else if (category === 'favorite') {
          if (favoriteIds.size > 0) {
           const { data, error } = await query
             .in('id', Array.from(favoriteIds))
@@ -115,7 +135,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
           fetchedExercises = [];
         }
       }
-      else if (selectedCategory === 'frequent') {
+      else if (category === 'frequent') {
         const { data: frequentIdsData, error: rpcError } = await supabase
           .rpc('get_frequent_exercises');
 
@@ -141,14 +161,27 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
         }
       }
 
-      if (selectedCategory !== 'favorite') {
+      if (category !== 'favorite') {
         fetchedExercises = fetchedExercises.map(exercise => ({
           ...exercise,
           is_favorite: favoriteIds.has(exercise.id)
         }));
       }
       
+      let initiallyFiltered = [...fetchedExercises];
+      if (currentSearchQuery && currentSearchQuery.length >= 1) {
+        initiallyFiltered = initiallyFiltered.filter(exercise =>
+          exercise.name.toLowerCase().includes(currentSearchQuery.toLowerCase())
+        );
+      }
+      if (currentSelectedMuscle) {
+        initiallyFiltered = initiallyFiltered.filter(exercise =>
+          exercise.muscle_primary?.includes(currentSelectedMuscle)
+        );
+      }
+
       setExercises(fetchedExercises);
+      setFilteredExercises(initiallyFiltered);
 
     } catch (err: any) {
       console.error('Error fetching exercises:', err);
@@ -158,30 +191,13 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
     }
   };
 
-  const filterExercises = () => {
-    let filtered = [...exercises];
-
-    if (searchQuery && searchQuery.length >= 1) {
-      filtered = filtered.filter(exercise =>
-        exercise.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    if (selectedMuscle) {
-      filtered = filtered.filter(exercise =>
-        exercise.muscle_primary?.includes(selectedMuscle)
-      );
-    }
-
-    setFilteredExercises(filtered);
-  };
-
   const handleSearch = (text: string) => {
     setSearchQuery(text);
   };
 
   const handleMuscleSelect = (muscle: string) => {
-    setSelectedMuscle(muscle === selectedMuscle ? '' : muscle);
+    const newMuscle = muscle === selectedMuscle ? '' : muscle;
+    setSelectedMuscle(newMuscle);
   };
 
   const handleCategoryChange = (category: CategoryOption) => {
@@ -299,7 +315,7 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
           ) : error ? (
              <View style={styles.centeredMessage}>
                <Text style={styles.errorText}>{error}</Text>
-               <Pressable style={styles.retryButton} onPress={fetchExercises}>
+               <Pressable style={styles.retryButton} onPress={() => fetchExercises(selectedCategory, searchQuery, selectedMuscle)}>
                  <Text style={styles.retryButtonText}>Retry</Text>
                </Pressable>
              </View>

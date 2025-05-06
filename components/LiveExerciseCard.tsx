@@ -82,8 +82,19 @@ const LiveExerciseCard = forwardRef<
     field: 'weight' | 'reps',
     value: string
   ) => {
-    // Allow decimal values for both weight and reps
-    const filteredValue = value.replace(/[^0-9.]/g, '');
+    // Allow decimal values for both weight and reps, accepting both comma and period
+    let filteredValue = value.replace(/[^0-9.,]/g, ''); // <-- Allow comma
+    
+    // Replace comma with period for consistency before saving
+    filteredValue = filteredValue.replace(',', '.'); // <-- Convert comma
+    
+    // Ensure only one decimal point exists
+    const parts = filteredValue.split('.');
+    if (parts.length > 2) {
+      // If more than one dot, keep only the first one
+      filteredValue = parts[0] + '.' + parts.slice(1).join('');
+    }
+
     onSetUpdate(exercise.id, setIndex, field, filteredValue);
   };
 
@@ -265,7 +276,7 @@ const LiveExerciseCard = forwardRef<
                 <Checkbox
                   checked={set.completed}
                   onChange={(checked) => handleSetCompleted(setIndex, checked)}
-                  disabled={!set.weight || !set.reps}
+                  disabled={(!set.weight || set.weight === '0') || set.reps === ''}
                 />
               )}
             </View>

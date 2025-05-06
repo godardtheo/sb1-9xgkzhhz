@@ -6,6 +6,8 @@ import {
   Pressable,
   TextInput,
   Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { X } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
@@ -43,10 +45,17 @@ export default function WorkoutNameModal({
     } else {
       onConfirm(initialName); // Fallback to initial name if empty
     }
+    Keyboard.dismiss();
+  };
+
+  const handleClose = () => {
+    Keyboard.dismiss();
+    onClose();
   };
 
   // Common content renderer
   const renderContent = () => (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
     <Animated.View
       style={styles.modalContainer}
       entering={SlideInDown.springify().damping(15)}
@@ -56,7 +65,7 @@ export default function WorkoutNameModal({
         <View style={styles.header}>
           <Text style={styles.title}>Workout Name</Text>
           <Pressable
-            onPress={onClose}
+              onPress={handleClose}
             style={styles.closeButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -79,7 +88,7 @@ export default function WorkoutNameModal({
         <View style={styles.actions}>
           <Pressable
             style={[styles.button, styles.cancelButton]}
-            onPress={onClose}
+              onPress={handleClose}
           >
             <Text style={[styles.buttonText, styles.cancelButtonText]}>
               Cancel
@@ -96,6 +105,7 @@ export default function WorkoutNameModal({
         </View>
       </View>
     </Animated.View>
+    </TouchableWithoutFeedback>
   );
 
   // iOS uses the standard Modal
@@ -108,7 +118,7 @@ export default function WorkoutNameModal({
         animationType="fade"
       >
         <View style={styles.iosOverlay}> 
-          <Pressable style={styles.backdrop} onPress={onClose} /> 
+          <Pressable style={styles.backdrop} onPress={handleClose} /> 
           {renderContent()}
         </View>
       </Modal>
@@ -123,7 +133,7 @@ export default function WorkoutNameModal({
   return (
     <View style={styles.androidFakeModalWrapper}>
       {/* Backdrop for Android fake modal */}
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.backdrop} onPress={handleClose} />
       {/* Centering container for Android */}
       <View style={styles.androidCenteringContainer}>
          {renderContent()}
