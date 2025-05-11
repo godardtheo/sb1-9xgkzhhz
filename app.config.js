@@ -40,7 +40,8 @@ module.exports = {
       },
       eas: {
         projectId: "your-project-id"
-      }
+      },
+      EXPO_PUBLIC_ENV: process.env.EXPO_PUBLIC_ENV || 'dev'
     },
     "newArchEnabled": true
   }

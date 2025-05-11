@@ -495,6 +495,7 @@ const styles = StyleSheet.create({
   muscleGroupsContent: {
     paddingHorizontal: 16,
     gap: 8,
+    alignItems: 'center',
   },
   muscleGroupButton: {
     backgroundColor: '#115e59',

@@ -82,22 +82,10 @@ export default function BodyWeightPage() {
       // Fetch user data
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Get initial weight from users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('initial_weight')
-          .eq('id', user.id)
-          .single();
-        
-        if (!userError && userData) {
-          setInitialWeight(userData.initial_weight);
-          console.log('[DEBUG] Fetched initial weight:', userData.initial_weight);
-        }
-        
-        // Get goal weight from user_goals table
+        // Get goal weight and initial weight from user_goals table
         const { data: goalData, error: goalError } = await supabase
-          .from('user_goals')
-          .select('weight')
+          .from('user_goals') // Relies on default schema (public or production)
+          .select('weight, initial_weight') // Select both goal weight and initial weight
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false })
           .limit(1)
@@ -105,7 +93,14 @@ export default function BodyWeightPage() {
         
         if (!goalError && goalData) {
           setWeightGoal(goalData.weight);
+          setInitialWeight(goalData.initial_weight); // Set initial weight from user_goals
           console.log('[DEBUG] Fetched goal weight:', goalData.weight);
+          console.log('[DEBUG] Fetched initial weight from user_goals:', goalData.initial_weight);
+        } else if (goalError) {
+          // It's okay if no goal is found, don't log it as a fatal error for initial_weight
+          console.log('[DEBUG] No user_goal found or error fetching it. Goal/Initial weight might be null.', goalError.message);
+          setWeightGoal(null); // Ensure they are null if not found
+          setInitialWeight(null);
         }
       }
     } catch (err) {
@@ -142,14 +137,12 @@ export default function BodyWeightPage() {
 
   // Handler for opening modal in STARTING mode
   const handleStartingPress = () => {
-    if (initialWeight) {
-      setBodyWeightModalMode(BodyWeightModalMode.STARTING);
-      setInitialModalValue(initialWeight);
-      setBodyWeightModalVisible(true);
-      // Only use haptics on native platforms (iOS, Android)
-      if (Platform.OS !== 'web') {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
+    setBodyWeightModalMode(BodyWeightModalMode.STARTING);
+    setInitialModalValue(initialWeight);
+    setBodyWeightModalVisible(true);
+    // Only use haptics on native platforms (iOS, Android)
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { supabase, withTimeout } from '../supabase';
-import { Session } from '@supabase/supabase-js';
+import { supabase } from '../supabase';
+import { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 type UserProfile = {
@@ -11,6 +11,13 @@ type UserProfile = {
   avatar_url: string | null;
   height: number | null;
   weight: number | null;
+  gender: string | null;
+  weight_unit: 'kg' | 'lb' | null;
+  initial_weight?: number | null;
+  target_weight?: number | null;
+  language?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
 };
 
 interface AuthState {
@@ -19,6 +26,8 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   initialized: boolean;
+  isAppResuming: boolean;
+  pendingModalPath: string | null;
   
   // Actions
   signIn: (email: string, password: string) => Promise<void>;
@@ -27,6 +36,8 @@ interface AuthState {
   initialize: () => Promise<void>;
   fetchUserProfile: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
+  setAppResuming: (isResuming: boolean) => void;
+  setPendingModalPath: (path: string | null) => void;
 }
 
 // Function to schedule token refresh
@@ -42,12 +53,12 @@ const scheduleTokenRefresh = (session: Session | null, callback: () => void) => 
   
   console.log(`Scheduling token refresh in ${Math.floor(refreshDelay / 1000)} seconds`);
   
-  return setTimeout(callback, refreshDelay);
+  return setTimeout(callback, refreshDelay) as unknown as number;
 };
 
 export const useAuthStore = create<AuthState>((set, get) => {
   // Keep token refresh timeout ID
-  let refreshTimeoutId: NodeJS.Timeout | null = null;
+  let refreshTimeoutId: number | null = null;
   
   // Helper to clear refresh timeout
   const clearRefreshTimeout = () => {
@@ -63,17 +74,25 @@ export const useAuthStore = create<AuthState>((set, get) => {
     loading: false,
     error: null,
     initialized: false,
+    isAppResuming: false,
+    pendingModalPath: null,
 
-    initialize: async () => {
+    initialize: async (): Promise<void> => {
+      if (get().initialized) {
+        console.log('[AuthStore Initialize] Already initialized, skipping.');
+        return;
+      }
+      console.log('[AuthStore Initialize] Starting initialization...');
       try {
-        set({ loading: true });
+        set({ loading: true, error: null, initialized: false }); // Ensure error/initialized are reset
         
-        // Get the initial session
-        const { data, error } = await withTimeout(supabase.auth.getSession());
+        console.log('[AuthStore Initialize] Attempting to get session...');
+        const { data, error } = await supabase.auth.getSession();
+        console.log('[AuthStore Initialize] getSession response:', { sessionExists: !!data.session, error });
         
         if (error) {
-          console.error('Session retrieval error:', error);
-          set({ error: error.message, initialized: true });
+          console.error('[AuthStore Initialize] Error getting session:', error.message);
+          set({ error: error.message, initialized: true, loading: false }); // Ensure loading is false
           return;
         }
         
@@ -81,108 +100,128 @@ export const useAuthStore = create<AuthState>((set, get) => {
           session: data.session, 
           initialized: true
         });
+        console.log('[AuthStore Initialize] Session set in store. Current session:', data.session ? 'Exists' : 'Null');
         
-        // If we have a session, fetch the user profile
         if (data.session) {
+          console.log('[AuthStore Initialize] Session exists, attempting to fetch user profile...');
           try {
-            await get().fetchUserProfile();
+            await get().fetchUserProfile(); // fetchUserProfile has its own logs
+            console.log('[AuthStore Initialize] User profile fetch attempt completed.');
             
-            // Schedule refresh
             clearRefreshTimeout();
+            console.log('[AuthStore Initialize] Scheduling token refresh.');
             refreshTimeoutId = scheduleTokenRefresh(data.session, () => {
+              console.log('[AuthStore Initialize] Scheduled token refresh triggered.');
               get().refreshSession().catch(err => {
-                console.warn('Auto-refresh failed:', err);
+                console.warn('[AuthStore Initialize] Auto-refresh from schedule failed:', err);
               });
             });
             
-          } catch (profileError) {
-            console.warn('Error fetching initial profile:', profileError);
+          } catch (profileError: any) {
+            console.warn('[AuthStore Initialize] Error during initial profile fetch or refresh scheduling:', profileError.message);
+            // Do not set loading to false here, finally block will do it.
           }
+        } else {
+          console.log('[AuthStore Initialize] No session found after getSession.');
         }
         
-        // Set up auth state change listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-          console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
+        console.log('[AuthStore Initialize] Setting up onAuthStateChange listener...');
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+          console.log('[AuthStore onAuthStateChange] Event:', event, '; Session:', session ? 'Exists' : 'Null');
           
-          // Update the session in our state
           set({ session });
           
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            // Schedule refresh for the new session
+            console.log('[AuthStore onAuthStateChange] SIGNED_IN or TOKEN_REFRESHED. Fetching profile & scheduling refresh.');
             clearRefreshTimeout();
             if (session) {
               refreshTimeoutId = scheduleTokenRefresh(session, () => {
+                console.log('[AuthStore onAuthStateChange] Scheduled token refresh triggered.');
                 get().refreshSession().catch(err => {
-                  console.warn('Auto-refresh failed:', err);
+                  console.warn('[AuthStore onAuthStateChange] Auto-refresh from schedule failed:', err);
                 });
               });
             }
             
-            // Fetch user profile
             get().fetchUserProfile().catch(err => {
-              console.warn('Error fetching profile after auth change:', err);
+              console.warn('[AuthStore onAuthStateChange] Error fetching profile after auth change:', err);
             });
           } 
-          else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          else if ((event as string) === 'USER_DELETED' || event === 'SIGNED_OUT') { 
+            console.log('[AuthStore onAuthStateChange] USER_DELETED or SIGNED_OUT. Clearing profile/session.');
             clearRefreshTimeout();
-            set({ userProfile: null });
+            set({ userProfile: null, session: null });
           }
         });
+        console.log('[AuthStore Initialize] onAuthStateChange listener set up.');
         
-        // Return cleanup function to remove subscription
-        return () => {
-          subscription.unsubscribe();
-        };
+        return;
+
       } catch (error: any) {
-        console.error('Error initializing auth:', error);
-        set({ error: error.message, initialized: true });
+        console.error('[AuthStore Initialize] Critical error during initialization:', error.message);
+        set({ error: error.message, initialized: true, loading: false });
       } finally {
+        console.log('[AuthStore Initialize] Initialization function finally block. Setting loading to false.');
         set({ loading: false });
       }
     },
 
-    fetchUserProfile: async () => {
+    setAppResuming: (isResuming: boolean) => {
+      console.log(`[AuthStore setAppResuming] Setting isAppResuming to: ${isResuming}`);
+      set({ isAppResuming: isResuming });
+    },
+
+    setPendingModalPath: (path: string | null) => {
+      console.log(`[AuthStore setPendingModalPath] Setting pendingModalPath to: ${path}`);
+      set({ pendingModalPath: path });
+    },
+
+    fetchUserProfile: async (): Promise<void> => {
       const currentState = get();
-      
+      console.log('[AuthStore fetchUserProfile] Attempting to fetch profile. User session exists:', !!currentState.session?.user);
+
       try {
         if (!currentState.session?.user) {
-          console.warn('No active session, cannot fetch user profile');
+          console.warn('[AuthStore fetchUserProfile] No active session or user, cannot fetch profile.');
+          set({ userProfile: null }); // Clear profile if no user/session
           return;
         }
 
-        // Get user from auth
-        const { data, error } = await withTimeout(supabase.auth.getUser());
+        console.log(`[AuthStore fetchUserProfile] Fetching auth user (ID: ${currentState.session.user.id})...`);
+        const { data: userAuth, error: authError } = await supabase.auth.getUser();
+        console.log('[AuthStore fetchUserProfile] supabase.auth.getUser response:', { userAuth, authError });
         
-        if (error || !data.user) {
-          console.error('Error getting auth user:', error || 'No user found');
+        if (authError || !userAuth.user) {
+          console.error('[AuthStore fetchUserProfile] Error getting auth user or no user found:', authError?.message || 'No user data');
+          set({ userProfile: null }); // Clear profile on error
           return;
         }
 
-        console.log('Fetching profile for user:', data.user.id);
-        
-        // Fetch user profile
-        const { data: profile, error: profileError } = await withTimeout(
-          supabase
+        console.log(`[AuthStore fetchUserProfile] Fetching database profile for user ID: ${userAuth.user.id}`);
+        const { data: profile, error: profileError } = await supabase
+            .schema('public')
             .from('users')
             .select('*')
-            .eq('id', data.user.id)
-            .single()
-        );
+            .eq('id', userAuth.user.id)
+            .single();
+        console.log('[AuthStore fetchUserProfile] Database profile response:', { profile, profileError });
 
         if (profileError) {
-          console.error('Error fetching user profile:', profileError);
+          console.error('[AuthStore fetchUserProfile] Error fetching database profile:', profileError.message);
+          set({ userProfile: null }); // Clear profile on error
           return;
         }
 
         if (profile) {
-          console.log('User profile retrieved:', profile.username || profile.email);
+          console.log('[AuthStore fetchUserProfile] User profile retrieved:', profile.username || profile.email);
           set({ userProfile: profile as UserProfile });
         } else {
-          console.warn('No user profile found for ID:', data.user.id);
+          console.warn('[AuthStore fetchUserProfile] No database profile found for ID:', userAuth.user.id);
+          set({ userProfile: null }); // Clear profile if not found
         }
       } catch (error: any) {
-        console.error('Error in fetchUserProfile:', error.message);
-        // Don't update state to avoid UI disruption
+        console.error('[AuthStore fetchUserProfile] Critical error in fetchUserProfile:', error.message);
+        set({ userProfile: null }); // Clear profile on critical error
       }
     },
 
@@ -191,7 +230,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       
       try {
         console.log('Manually refreshing auth session...');
-        const { data, error } = await withTimeout(supabase.auth.refreshSession());
+        const { data, error } = await supabase.auth.refreshSession();
         
         if (error) {
           console.error('Session refresh failed:', error.message);
@@ -223,16 +262,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
     },
 
-    signIn: async (email: string, password: string) => {
+    signIn: async (email: string, password: string): Promise<void> => {
       try {
         set({ loading: true, error: null });
         
-        const { data, error } = await withTimeout(
-          supabase.auth.signInWithPassword({
-            email,
-            password,
-          })
-        );
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         
         if (error) throw error;
         
@@ -262,16 +299,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
     },
 
-    signUp: async (email: string, password: string) => {
+    signUp: async (email: string, password: string): Promise<void> => {
       try {
         set({ loading: true, error: null });
         
-        const { data, error } = await withTimeout(
-          supabase.auth.signUp({
-            email,
-            password,
-          })
-        );
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
         
         if (error) throw error;
         
@@ -303,7 +338,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
     },
 
-    signOut: async () => {
+    signOut: async (): Promise<void> => {
       try {
         set({ loading: true, error: null });
         
@@ -311,8 +346,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         clearRefreshTimeout();
         set({ userProfile: null });
         
-        // Sign out from Supabase with timeout for reliability
-        const { error } = await withTimeout(supabase.auth.signOut(), 5000);
+        // Sign out from Supabase
+        const { error } = await supabase.auth.signOut();
         
         // Always reset local state regardless of errors
         set({ session: null });

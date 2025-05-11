@@ -16,9 +16,10 @@ interface NonDraggableDoneExerciseProps {
   };
   exerciseId: string;
   onPress: (exerciseId: string) => void;
+  weightUnit: string;
 }
 
-export default function NonDraggableDoneExercise({ exercise, exerciseId, onPress }: NonDraggableDoneExerciseProps) {
+export default function NonDraggableDoneExercise({ exercise, exerciseId, onPress, weightUnit }: NonDraggableDoneExerciseProps) {
   return (
     <Pressable 
       style={styles.container}
@@ -41,7 +42,7 @@ export default function NonDraggableDoneExercise({ exercise, exerciseId, onPress
       {exercise.sets.map((set, index) => (
         <View key={index} style={styles.setRow}>
           <Text style={styles.setText}>{index + 1}</Text>
-          <Text style={styles.setText}>{set.weight} lbs</Text>
+          <Text style={styles.setText}>{set.weight} {weightUnit}</Text>
           <Text style={styles.setText}>{set.reps}</Text>
         </View>
       ))}

@@ -148,15 +148,20 @@ const BodyWeightModal: React.FC<BodyWeightModalProps> = ({
 
       switch (mode) {
         case BodyWeightModalMode.STARTING:
-          // Save as initial weight in users table
-          console.log('[DEBUG] Saving initial weight:', weightValue);
+          // Save as initial weight in user_goals table
+          console.log('[DEBUG] Saving initial weight to user_goals:', weightValue);
           const { error: initialError } = await supabase
-            .from('users')
-            .update({ initial_weight: weightValue })
-            .eq('id', user.id);
+            .from('user_goals') // Targets public.user_goals via default schema or production.user_goals if env is prod
+            .upsert({ 
+              user_id: user.id, 
+              initial_weight: weightValue,
+              updated_at: new Date().toISOString() // Keep updated_at fresh
+            }, { 
+              onConflict: 'user_id' 
+            });
 
           if (initialError) {
-            console.error('Error saving initial weight:', initialError);
+            console.error('Error saving initial weight to user_goals:', initialError);
             alert('Error saving initial weight. Please try again.');
             return;
           }

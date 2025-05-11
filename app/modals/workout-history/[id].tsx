@@ -20,6 +20,7 @@ export default function WorkoutDetailModal() {
   const [workoutData, setWorkoutData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
+  const [weightUnit, setWeightUnit] = useState<string>('kg'); // Default to kg
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
@@ -41,6 +42,35 @@ export default function WorkoutDetailModal() {
       setError(null);
       
       console.log('Starting workout data fetch...');
+      
+      // Get current user
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !authUser) {
+        console.error('Error fetching authenticated user:', authError);
+        setError('Could not authenticate user.');
+        setLoading(false);
+        return;
+      }
+      
+      // Fetch user's weight unit preference
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('weight_unit')
+        .eq('id', authUser.id)
+        .single();
+
+      if (userError) {
+        console.warn('Warning fetching user weight unit:', userError.message);
+        // Default to 'kg' or handle as per app logic, here we set it and continue
+        setWeightUnit('kg');
+      } else if (userData && userData.weight_unit) {
+        setWeightUnit(userData.weight_unit);
+        console.log('User weight unit:', userData.weight_unit);
+      } else {
+        setWeightUnit('kg'); // Default if not set
+        console.log('No weight unit found in profile, using default \'kg\'.');
+      }
       
       // Get the workout basic data first
       const { data: workout, error: workoutError } = await supabase
@@ -403,6 +433,7 @@ export default function WorkoutDetailModal() {
               exercise={exercise}
               exerciseId={exercise.exerciseId}
               onPress={handleExercisePress}
+              weightUnit={weightUnit}
             />
           ))
         ) : (

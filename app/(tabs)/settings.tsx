@@ -70,7 +70,7 @@ export default function SettingsScreen() {
               style={styles.avatar}
             /> */}
             <View style={styles.profileInfo}>
-              <Text style={styles.username}>{userProfile?.full_name || 'Loading...'}</Text>
+              <Text style={styles.username}>{userProfile?.username|| 'Loading...'}</Text>
               <Text style={styles.email}>{userProfile?.email || 'Loading...'}</Text>
             </View>
           </View>
@@ -146,13 +146,15 @@ export default function SettingsScreen() {
                 <View style={[styles.radioCircle, units === 'kg' && styles.radioCircleSelected]} />
                 <Text style={styles.radioLabel}>kg</Text>
               </Pressable>
+              {/* Radio button for pounds (lb) unit selection 
               <Pressable 
                 style={[styles.radioButton, units === 'lb' && styles.radioButtonSelected]}
                 onPress={() => setUnits('lb')}
               >
                 <View style={[styles.radioCircle, units === 'lb' && styles.radioCircleSelected]} />
                 <Text style={styles.radioLabel}>lb</Text>
-              </Pressable>
+              </Pressable>*/}
+              
             </View>
           </View>
         </View>

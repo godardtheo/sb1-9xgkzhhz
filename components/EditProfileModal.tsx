@@ -62,6 +62,7 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
       };
 
       const { error: updateError } = await supabase
+        .schema('public')
         .from('users')
         .update(updates)
         .eq('id', user.id);

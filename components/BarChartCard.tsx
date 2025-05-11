@@ -650,16 +650,34 @@ function formatDataForPeriod(data: BarChartDataPoint[], period: TimePeriod): For
       
     case '12M':
     case 'ALL':
-      // For longer periods, show abbreviated month names only
-      const monthlyData: {[key: string]: number} = {};
+      // Aggregate by YYYY-MM to handle multiple years correctly
+      const monthlyDataMap = new Map<string, { value: number; date: Date }>();
+      
       sortedData.forEach(item => {
         const date = new Date(item.date);
-        // Get short month name (3 letters)
-        const monthLabel = date.toLocaleString('default', { month: 'short' }).substring(0, 3);
-        monthlyData[monthLabel] = (monthlyData[monthLabel] || 0) + item.value;
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0'); // Pad month for correct sorting
+        const yearMonthKey = `${year}-${month}`;
+        
+        const existing = monthlyDataMap.get(yearMonthKey);
+        monthlyDataMap.set(yearMonthKey, {
+          value: (existing?.value || 0) + item.value,
+          date: date // Keep the last date for potential label generation
+        });
       });
+
+      // Convert map entries to an array and sort chronologically by YYYY-MM key
+      const sortedEntries = Array.from(monthlyDataMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
       
-      return Object.entries(monthlyData).map(([label, value]) => ({ label, value }));
+      // Map to final format, extracting short month name for the label
+      return sortedEntries.map(([yearMonthKey, data]) => {
+        // Use the stored date to get the correct month label
+        const monthLabel = data.date.toLocaleString('default', { month: 'short' }).substring(0, 3);
+        return {
+          label: monthLabel,
+          value: data.value
+        };
+      });
       
     default:
       return sortedData.map(item => {

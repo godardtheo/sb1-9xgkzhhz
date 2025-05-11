@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { getNextWorkout } from '@/lib/workoutUtils';
 
 type ProgramData = {
@@ -19,22 +19,9 @@ export default function CurrentProgramCard() {
   const [programData, setProgramData] = useState<ProgramData>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadAttempts, setLoadAttempts] = useState(0);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchProgramData();
-    
-    // Component cleanup
-    return () => {
-      // Reset state on unmount to prevent stale data
-      setProgramData(null);
-      setLoading(false);
-      setError(null);
-    };
-  }, [loadAttempts]);
-
-  const fetchProgramData = async () => {
+  const fetchProgramData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -47,7 +34,21 @@ export default function CurrentProgramCard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProgramData();
+
+      return () => {
+        // Optionnel : nettoyer si fetchProgramData démarre quelque chose qui doit être arrêté
+        // Par exemple, si c'était un listener
+        // Pour l'instant, on peut laisser vide ou juste réinitialiser l'état si besoin
+        // setProgramData(null); // Pour éviter de voir d'anciennes données brièvement
+        // setLoading(true); // Pour montrer le loader au prochain focus si les données sont nulles
+      };
+    }, [fetchProgramData])
+  );
 
   const handlePress = () => {
     if (programData?.nextWorkout) {
@@ -61,8 +62,12 @@ export default function CurrentProgramCard() {
         console.error('Navigation error:', error);
         // If navigation fails, retry after a short delay
         setTimeout(() => {
-          router.push('/modals/live-workout?template_id=' + 
-            encodeURIComponent(programData.nextWorkout!.template_id));
+          // router.push('/modals/live-workout?template_id=' + 
+          //   encodeURIComponent(programData.nextWorkout!.template_id));
+          router.push({
+            pathname: '/modals/live-workout',
+            params: { template_id: programData.nextWorkout!.template_id },
+          });
         }, 100);
       }
     } else {
@@ -72,7 +77,7 @@ export default function CurrentProgramCard() {
   };
 
   const handleRetry = () => {
-    setLoadAttempts(prev => prev + 1);
+    fetchProgramData();
   };
 
   if (loading) {

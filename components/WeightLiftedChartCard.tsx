@@ -46,6 +46,7 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
 
         // Fetch user's weight unit preference
         const { data: userData, error: userError } = await supabase
+          .schema('public')
           .from('users')
           .select('weight_unit')
           .eq('id', user.id)

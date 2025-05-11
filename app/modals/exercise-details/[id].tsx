@@ -70,7 +70,13 @@ export default function ExerciseDetailsScreen() {
         return;
       }
 
+      console.log(`[ExerciseDetails] fetchUserWeightUnit: User ID from AuthStore: ${user.id}`); 
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log(`[ExerciseDetails] fetchUserWeightUnit: Current auth.uid() from session: ${session?.user?.id}`);
+
+      console.log(`[ExerciseDetails] fetchUserWeightUnit: Querying public.users for ID: ${user.id}`); // Log the user ID
       const { data, error } = await supabase
+        .schema('public')
         .from('users')
         .select('weight_unit')
         .eq('id', user.id)

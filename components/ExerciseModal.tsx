@@ -82,8 +82,9 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
     }
 
     if (selectedMuscle) {
+      const dbFormattedMuscle = selectedMuscle.toLowerCase().replace(' ', '_');
       filtered = filtered.filter(exercise =>
-        exercise.muscle_primary?.includes(selectedMuscle)
+        exercise.muscle_primary?.includes(dbFormattedMuscle)
       );
     }
     setFilteredExercises(filtered);
@@ -175,8 +176,9 @@ export default function ExerciseModal({ visible, onClose, onSelect, excludeExerc
         );
       }
       if (currentSelectedMuscle) {
+        const dbFormattedMuscle = currentSelectedMuscle.toLowerCase().replace(' ', '_');
         initiallyFiltered = initiallyFiltered.filter(exercise =>
-          exercise.muscle_primary?.includes(currentSelectedMuscle)
+          exercise.muscle_primary?.includes(dbFormattedMuscle)
         );
       }
 
