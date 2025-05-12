@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, Platform, Keyboard, ViewStyle, TextStyle } from 'react-native';
 import { useRouter, useSegments } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
@@ -19,21 +19,23 @@ export default function LoginScreen() {
   useEffect(() => {
     let navigationTimer: number | null = null; // Correct type for React Native
 
-    if (isAppResuming || authStorePendingModalPath) {
-      if (authStorePendingModalPath) {
-        console.log(`[LoginScreen] Navigation BLOCKED due to authStorePendingModalPath: ${authStorePendingModalPath}`);
-      }
+    if (authStorePendingModalPath) {
+      // console.log(`[LoginScreen] Navigation BLOCKED due to authStorePendingModalPath: ${authStorePendingModalPath}`);
       return;
     }
 
-    // segments est de type string[]. ex: ['(auth)', 'login']
     const isCurrentlyOnAuthLoginRoute = segments[0] === '(auth)' && segments[1] === 'login';
 
-    if (session && userProfile && isCurrentlyOnAuthLoginRoute) {
-      console.log("Login: Session and profile detected on /login (app not resuming), redirecting to home (after 100ms delay)");
+    if (session && userProfile && isCurrentlyOnAuthLoginRoute && !isAppResuming) {
+      // console.log("Login: Session and profile detected on /login, app NOT resuming. Redirecting to home (after 100ms delay).");
       navigationTimer = setTimeout(() => {
         router.replace('/(tabs)');
       }, 100);
+    } else if (session && userProfile && isCurrentlyOnAuthLoginRoute && isAppResuming) {
+      // console.log("Login: Session and profile detected on /login, BUT app IS resuming. Deferring redirection.");
+      // Ne rien faire, laisser AppState gérer la restauration si nécessaire.
+      // Si AppState ne restaure pas ailleurs, l'utilisateur est loggué mais reste sur /login.
+      // AuthLayout devrait prendre le relai quand isAppResuming redevient false.
     }
 
     return () => {
@@ -44,6 +46,9 @@ export default function LoginScreen() {
   }, [session, userProfile, router, segments, isAppResuming, authStorePendingModalPath]);
 
   const handleLogin = async () => {
+    // LOG AJOUTÉ ICI pour voir l'état au moment de l'appel
+    // console.log(`[LoginScreen handleLogin ENTRY] loading=${loading}, email=${email ? 'filled' : 'empty'}, password=${password ? 'filled' : 'empty'}`);
+    
     try {
       setError(null);
       
@@ -57,12 +62,12 @@ export default function LoginScreen() {
         return;
       }
       
-      console.log('Signing in with:', email);
+      console.log('[LoginScreen] Signing in with:', email);
       await signIn(email, password);
       
       // Note: We don't need to navigate here, the useEffect will handle that
       // when the session state updates
-      console.log('Sign in successful');
+      // console.log('Sign in successful');
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Failed to sign in');
@@ -113,11 +118,14 @@ export default function LoginScreen() {
 
           <Pressable 
             style={styles.button}
-            onPress={handleLogin}
+            onPress={() => {
+              // console.log('[LoginScreen BUTTON PRESS] Sign In button pressed, calling handleLogin...'); 
+              handleLogin();
+            }}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#021a19" />
+              <ActivityIndicator color="#5eead4" />
             ) : (
               <>
                 <Text style={styles.buttonText}>Sign In</Text>

@@ -18,6 +18,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+// Basic LoadingScreen component
+function LoadingScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#021a19' }}>
+      <ActivityIndicator size="large" color="#14b8a6" />
+      <Text style={{ marginTop: 12, color: '#5eead4', fontFamily: 'Inter-Regular', fontSize: 14 }}>
+        Loading...
+      </Text>
+    </View>
+  );
+}
+
+// Basic ResumingScreen component
+function ResumingScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#021a19' }}>
+      <ActivityIndicator size="large" color="#14b8a6" />
+      <Text style={{ marginTop: 12, color: '#5eead4', fontFamily: 'Inter-Regular', fontSize: 14 }}>
+        Resuming...
+      </Text>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   useFrameworkReady();
   const {
@@ -35,11 +59,11 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname); // Garde une référence au pathname
+  const segmentsRef = useRef(segments); // NOUVELLE REF pour les segments
 
-  // Refs pour le listener AppState afin d'avoir les valeurs à jour
-  const appStateRef = useRef(AppState.currentState);
-  // pathnameRef n'est plus nécessaire pour le useEffect principal, mais toujours pour AppState listener
-  const pathnameRef = useRef(pathname); 
+  // Log pour suivre pathname et pathnameRef au début du render de RootLayout
+  // console.log(`[RootLayout RENDER] Pathname: ${pathname}, PathnameRef Current: ${pathnameRef.current}`);
 
   const [isNavigating, setIsNavigating] = useState(false);
 
@@ -51,9 +75,16 @@ export default function RootLayout() {
   });
   
   useEffect(() => {
-    pathnameRef.current = pathname;
+    pathnameRef.current = pathname; // Mettre à jour la réf lorsque le pathname change
+    // console.log(`[RootLayout PathnameEffect] Pathname updated to: ${pathname}, PathnameRef updated to: ${pathnameRef.current}`);
   }, [pathname]);
 
+  // NOUVEAU useEffect pour mettre à jour segmentsRef
+  useEffect(() => {
+    segmentsRef.current = segments;
+    // console.log(`[RootLayout SegmentsEffect] Segments updated, SegmentsRef updated to: ${JSON.stringify(segmentsRef.current)}`);
+  }, [segments]);
+  
   // Initialize authentication when app starts
   useEffect(() => {
     initialize();
@@ -61,12 +92,15 @@ export default function RootLayout() {
 
   // Handle navigation based on auth state
   useEffect(() => {
+    // console.log(`[RootLayout NavCheck EFFECT EVAL] Path: ${pathname}, Initialized: ${initialized}, Loading (store): ${loading}, Session: ${!!session}, UserProfile: ${!!userProfile}, isNavigating: ${isNavigating}, isAppResuming: ${isAppResuming}`);
     let redirectLoginTimer: number | null = null;
     let resetNavigatingTimer: number | null = null;
 
     // Utiliser pathname directement ici au lieu de pathnameRef.current
     // loading, initialized, isNavigating, isAppResuming sont vérifiés
-    if (loading || !initialized || isNavigating || isAppResuming) return;
+    if (loading || !initialized || isNavigating || isAppResuming) {
+      return;
+    }
     
     // currentPath est maintenant pathname
     const isInAuthGroup = segments[0] === '(auth)';
@@ -75,166 +109,220 @@ export default function RootLayout() {
     // User is authenticated if session and userProfile exist
     const isAuthenticated = session && userProfile;
     
-    console.log(`[RootLayout NavCheck] Path: ${pathname}, Segments: ${JSON.stringify(segments)}, isAuthenticated: ${isAuthenticated}, isInAuthGroup: ${isInAuthGroup}, isModalRoute: ${isModalRoute}, loading: ${loading}, initialized: ${initialized}, isNavigating: ${isNavigating}, isAppResuming: ${isAppResuming}`);
+    // console.log(`[RootLayout NavCheck] Path: ${pathname}, Segments: ${JSON.stringify(segments)}, isAuthenticated: ${isAuthenticated}, isInAuthGroup: ${isInAuthGroup}, isModalRoute: ${isModalRoute}, loading: ${loading}, initialized: ${initialized}, isNavigating: ${isNavigating}, isAppResuming: ${isAppResuming}`);
+    // if (__DEV__) console.log(`[RootLayout NavCheck_EFFECT_PRE_REDIRECT_LOGIC] Path: ${pathname}, Segments: ${JSON.stringify(segments)}, isAuthenticated: ${isAuthenticated}, isInAuthGroup: ${isInAuthGroup}, isModalRoute: ${isModalRoute}`);
 
     // Rediriger vers login SEULEMENT si:
     // 1. Non authentifié
     // 2. Pas dans le groupe (auth)
     // 3. Pas sur une route de modale (pour éviter de casser une restauration de modale)
     const shouldRedirectToLogin = !isAuthenticated && !isInAuthGroup && !isModalRoute;
-    console.log(`[RootLayout NavCheck] Calculated shouldRedirectToLogin: ${shouldRedirectToLogin}`);
+    // console.log(`[RootLayout NavCheck] Calculated shouldRedirectToLogin: ${shouldRedirectToLogin}`);
+    // if (__DEV__) console.log(`[RootLayout NavCheck_EFFECT_SHOULD_REDIRECT_LOGIN] shouldRedirectToLogin: ${shouldRedirectToLogin}, Path: ${pathname}`);
     
     if (shouldRedirectToLogin) {
-      setIsNavigating(true);
-      console.log(`RootLayout: User NOT authenticated (${isAuthenticated}), not in auth group (${isInAuthGroup}), not on modal route (${isModalRoute}). Path: ${pathname}. Conditions to redirect to login are MET.`);
-      redirectLoginTimer = setTimeout(() => {
-        console.log(`[!!! RootLayout REDIRECTING !!!] About to router.replace('/login'). Pathname at decision: ${pathname}, isAuthenticated: ${isAuthenticated}, isInAuthGroup: ${isInAuthGroup}, isModalRoute: ${isModalRoute}`);
-        try {
+    setIsNavigating(true);
+      // if (__DEV__) console.log(`[RootLayout NavCheck_EFFECT_SET_IS_NAVIGATING_TRUE] Path: ${pathname}, Now isNavigating: true`);
+    
+      // Appel direct de router.replace
+      // if (__DEV__) console.log(`[RootLayout NavCheck_EFFECT_IMMEDIATE_REPLACE_TO_LOGIN] Path: ${pathname}, Segments: ${JSON.stringify(segments)}, isAuthenticated: ${isAuthenticated}, isInAuthGroup: ${isInAuthGroup}, isModalRoute: ${isModalRoute}`);
+      try {
           router.replace('/login');
-        } catch (error) {
-          console.error('RootLayout Navigation error:', error);
-        } finally {
-          resetNavigatingTimer = setTimeout(() => {
-            setIsNavigating(false);
-          }, 500); // Delay to ensure navigation completes
-        }
-      }, 0); // setTimeout to allow current render cycle to complete
+      } catch (error) {
+        // if (__DEV__) console.error('[RootLayout NavCheck_EFFECT_REPLACE_ERROR]', error, `Path: ${pathname}`);
+      }
+
+      // Timer pour remettre isNavigating à false après un délai pour laisser la navigation se faire
+      resetNavigatingTimer = setTimeout(() => {
+        // if (__DEV__) console.log(`[RootLayout NavCheck_EFFECT_FINALLY_SET_IS_NAVIGATING_FALSE] Path: ${pathname}, Segments: ${JSON.stringify(segments)}, Resetting isNavigating from true to false.`);
+        setIsNavigating(false);
+      }, 750); // Délai augmenté pour plus de marge
+
     }
 
     return () => {
-      if (redirectLoginTimer) clearTimeout(redirectLoginTimer);
+      // if (redirectLoginTimer) clearTimeout(redirectLoginTimer); // redirectLoginTimer n'est plus utilisé
       if (resetNavigatingTimer) clearTimeout(resetNavigatingTimer);
     };
   }, [session, userProfile, initialized, segments, router, isNavigating, loading, isAppResuming, pathname, setPendingModalPath, setIsNavigating]);
 
   // Handle app state changes
   useEffect(() => {
+    // console.log('[RootLayout AppStateEffect] Setting up AppState listener.');
+    const appState = AppState.currentState;
+    const appStateRef = { current: appState };
+    let savedPath: string | null = null; // Déclarer savedPath ici
+
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
-      const previousAppStateValue = appStateRef.current;
-      appStateRef.current = nextAppState;
+      // LOG AJOUTÉ : Début du listener
+      // Log avec pathnameRef ET segmentsRef
+      // console.log(`[AppState Listener START] Current state: ${appStateRef.current}, Next state: ${nextAppState}, PathnameRef: ${pathnameRef.current}, SegmentsRef: ${JSON.stringify(segmentsRef.current)}`);
 
-      const wasInactive = previousAppStateValue.match(/inactive|background/);
-      const isActive = nextAppState === 'active';
-      const isEnteringBackground = (nextAppState === 'inactive' || nextAppState === 'background') && previousAppStateValue === 'active';
+      // Capture pathnameRef.current au moment où l'événement se produit,
+      // mais pour la sauvegarde en arrière-plan, nous le relirons à l'intérieur du setTimeout.
+      // const currentPathForListener = pathnameRef.current; 
 
-      console.log(`AppState changed from ${previousAppStateValue} to ${nextAppState}`);
-
-      if (isEnteringBackground) {
-        const currentPath = pathnameRef.current;
-        // Ne pas sauvegarder les routes d'authentification pour la restauration simple
-        // Permettre la sauvegarde des routes de modales
-        if (currentPath && !currentPath.startsWith('/(auth)')) {
-          console.log(`[AppState] Saving path to AsyncStorage: ${currentPath}`);
-          try {
-            await AsyncStorage.setItem('lastKnownRoute', currentPath);
-          } catch (e) { 
-            console.error('[AppState] Failed to save path to AsyncStorage', e); 
-          }
+      if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
+        // NOUVELLE CONDITION : Ignorer si on revient sur une page d'auth (utilise segmentsRef)
+        if (segmentsRef.current[0] === '(auth)') { 
+            // console.log(`[AppState Listener] Coming to foreground on AUTH screen (Segments: ${JSON.stringify(segmentsRef.current)}). IGNORING resume logic.`);
+            // Mettre à jour l'état immédiatement sans déclencher la logique de reprise
+            appStateRef.current = nextAppState; 
+            return; // Ne pas exécuter le reste (setAppResuming, refreshSession, etc.)
         }
-      }
-
-      if (wasInactive && isActive) {
-        console.log('App has come to the foreground!');
+        
+        // console.log(`[AppState Listener] App coming to foreground. Pathname: ${pathnameRef.current}, Segments: ${JSON.stringify(segmentsRef.current)}`); // LOG AJOUTÉ (avec segments)
+        // console.log('[AppState Listener] Setting isAppResuming = true'); // LOG AJOUTÉ
         setAppResuming(true); // UI shows "Resuming..."
 
         await refreshSession(); // Call store's refreshSession
 
-        console.log('[AppState] refreshSession call completed. Starting polling for auth state stabilization...');
+        // console.log('[AppState] refreshSession call completed. Starting polling for auth state stabilization...');
         let attempts = 0;
-        const maxAttempts = 50; // 50 * 200ms = 10 seconds timeout
+        const maxAttempts = 20; // Approx 5 seconds (20 * 250ms)
+        let authReady = false;
 
-        let sessionExists = !!useAuthStore.getState().session;
-        let profileMissing = !useAuthStore.getState().userProfile;
-        let authIsLoading = useAuthStore.getState().loading;
+        while (attempts < maxAttempts) {
+          const { session: currentSession, userProfile: currentProfile, loading: storeLoading } = useAuthStore.getState();
+          const sessionExists = !!currentSession;
+          const profileExists = !!currentProfile;
+          const isAuthProcessLoading = storeLoading; // Reflects loading state from useAuthStore
 
-        while ( (authIsLoading || (sessionExists && profileMissing)) && attempts < maxAttempts) {
-          if (authIsLoading) {
-            console.log(`[AppState] Auth loading... (Attempt ${attempts + 1}/${maxAttempts})`);
-          } else if (sessionExists && profileMissing) {
-            console.log(`[AppState] Session exists, profile missing. Waiting for profile... (Attempt ${attempts + 1}/${maxAttempts})`);
+          // console.log(`[AppState Polling attempt ${attempts + 1}] Session: ${sessionExists}, Profile: ${profileExists}, StoreLoading: ${isAuthProcessLoading}`);
+
+          if (!isAuthProcessLoading && ((sessionExists && profileExists) || !sessionExists)) {
+            // console.log('[AppState Polling] Auth state stabilized.');
+            authReady = true;
+            break;
           }
-          await new Promise(resolve => setTimeout(resolve, 200)); // Scrututer toutes les 200ms
+          await new Promise(resolve => setTimeout(resolve, 250));
           attempts++;
-          sessionExists = !!useAuthStore.getState().session;
-          profileMissing = !useAuthStore.getState().userProfile;
-          authIsLoading = useAuthStore.getState().loading;
         }
 
-        if (attempts >= maxAttempts) {
-            console.warn('[AppState] Max polling attempts reached. Auth state might be inconsistent.');
-        } else {
-            console.log('[AppState] Auth state stabilized (loading is false, and profile loaded if session exists).');
+        if (!authReady) {
+          // console.warn('[AppState Polling] Auth state did not stabilize after maximum attempts. Proceeding with caution.');
         }
 
         // Maintenant que l'état d'auth (session + profil) est stable, procéder à la restauration de la navigation
         let restoredNav = false;
         try {
-          const savedPath = await AsyncStorage.getItem('lastKnownRoute');
+          savedPath = await AsyncStorage.getItem('lastKnownRoute'); // Utiliser la variable déclarée plus haut
+          // LOG AJOUTÉ : Route lue depuis AsyncStorage
+          // console.log(`[AppState Listener] Read from AsyncStorage - savedPath: ${savedPath}`);
           if (savedPath) {
-            console.log(`[AppState] Found saved path: ${savedPath}`);
+            // console.log(`[AppState] Found saved path: ${savedPath}`);
             await AsyncStorage.removeItem('lastKnownRoute'); // Consommer la route sauvegardée
             
-            const { session: currentSession, userProfile: currentProfile, loading: storeLoading } = useAuthStore.getState();
-            console.log(`[AppState NavRestore Check] Final auth state before restoring. Session: ${!!currentSession}, Profile: ${!!currentProfile}, StoreLoading: ${storeLoading}, Path: ${savedPath}`);
-
-            if (currentSession && currentProfile && !storeLoading && savedPath && !savedPath.startsWith('/(auth)') && savedPath.length > 0) {
+            const { session: currentSessionAfterPoll, userProfile: currentProfileAfterPoll } = useAuthStore.getState();
+            
+            if (currentSessionAfterPoll && currentProfileAfterPoll) { // Only restore if authenticated
+              // console.log(`[AppState] User is authenticated. Proceeding with navigation restore to: ${savedPath}`);
               setIsNavigating(true); // Indiquer qu'une opération de navigation initiée par AppState est en cours
               try {
                 if (savedPath.startsWith('/modals')) {
-                  console.log(`[AppState] Saved path is a modal. Replacing to /(tabs)/ first (deferred), then will set pendingModalPath to: ${savedPath}`);
+                  // console.log(`[AppState] Saved path is a modal. Replacing to /(tabs)/ first (deferred), then will set pendingModalPath to: ${savedPath}`);
                   setTimeout(() => {
                     try {
                       router.replace('/(tabs)/' as any); // Établir une base saine, cast pour type. Route vers le groupe.
                       setPendingModalPath(savedPath); // Laisser RootLayout PendingModalNav gérer le push
                     } catch (deferredNavError) {
-                      console.error(`[AppState] Error during deferred router.replace or setPendingModalPath for ${savedPath}:`, deferredNavError);
-                      setPendingModalPath(null); // Nettoyer en cas d'erreur
-                      setIsNavigating(false); // Débloquer
+                      // console.error('[AppState] Error during deferred replace to /(tabs)/ for modal restore:', deferredNavError);
+                    } finally {
+                      // console.log("[AppState] Deferred navigation for modal setup finished, setting isNavigating to false inside setTimeout");
+                      // setIsNavigating(false); // Réinitialiser dans le finally du setTimeout de la modale
                     }
-                  }, 0); // Décaler pour laisser le temps au routeur de digérer les changements d'état
+                  }, 0); // Différer légèrement pour laisser le routeur s'initialiser
                 } else {
-                  console.log(`[AppState] Attempting to REPLACE non-modal navigation to: ${savedPath}`);
+                  // console.log(`[AppState] Attempting to REPLACE non-modal navigation to: ${savedPath}`);
                   router.replace(savedPath as any);
-                  // Pour les non-modales, on ne set pas pendingModalPath, la navigation est directe.
-                  // isNavigating sera remis à false par le setTimeout global ci-dessous.
+                  // console.log("[AppState] Non-modal navigation finished, setting isNavigating to false after replace");
+                  // setIsNavigating(false); // Réinitialiser après la navigation non-modale
                 }
-                restoredNav = true; 
-              } catch (navError) {
-                console.error(`[AppState] Error during router.replace or setPendingModalPath for ${savedPath}:`, navError);
-                // S'assurer de remettre isNavigating à false même en cas d'erreur ici pour débloquer
-                setIsNavigating(false); 
+                restoredNav = true;
+              } catch (e) {
+                // console.error('[AppState] Error restoring navigation:', e);
+                // console.log("[AppState] Error during navigation, setting isNavigating to false in catch block");
+                // setIsNavigating(false);
+              } finally {
+                // console.log("[AppState] Main navigation block finished (try/catch/finally). isNavigating will be reset by specific paths or PendingModalNav effect.");
+                // Ne pas mettre setIsNavigating(false) ici aveuglément, 
+                // car pour les modales, c'est géré par le useEffect de pendingModalPath
+                // et pour les non-modales, on pourrait le mettre après router.replace si besoin de finesse.
+                // L'état isNavigating est principalement pour le useEffect de RootLayout et PendingModalNav
               }
             } else {
-              console.log(`[AppState] Conditions not met for restoring path OR auth lost/loading. Auth: ${!!(currentSession && currentProfile)}, StoreLoading: ${storeLoading}, Path: ${savedPath}. Will not set pendingModalPath or navigate.`);
-              setPendingModalPath(null); // S'assurer qu'aucune modale n'est en attente
-              setIsNavigating(false); // Débloquer si on ne fait rien
+              // console.log('[AppState] User NOT authenticated after polling. Not restoring saved path. Will redirect to login or stay in auth flow.');
+              // Si l'utilisateur n'est plus authentifié, on ne restaure pas le chemin et on laisse la logique de redirection principale faire son travail.
+              // On pourrait vouloir nettoyer le pendingModalPath ici aussi si une modale était en attente et que l'utilisateur n'est plus loggué.
+              if (savedPath.startsWith('/modals')) {
+                // console.log('[AppState] Clearing pendingModalPath because user is no longer authenticated.');
+                setPendingModalPath(null);
+              }
             }
           } else {
-            // Pas de savedPath, donc on ne fait rien et on débloque isNavigating si on l'avait mis à true ailleurs (peu probable ici)
-             setIsNavigating(false);
+            // console.log('[AppState] No saved path found in AsyncStorage.');
           }
         } catch (e) {
-          console.error('[AppState] Failed to get or restore path from AsyncStorage', e);
-          setIsNavigating(false); // Débloquer en cas d'erreur
+          // console.error('[AppState] Error reading lastKnownRoute from AsyncStorage:', e);
+        } finally {
+          // console.log(`[AppState] Finished attempting to restore navigation. Restored: ${restoredNav}. Setting isAppResuming to false.`);
+          // Le setAppResuming(false) est retardé pour masquer les changements d'écran
+          // Il faut s'assurer que isNavigating est remis à false APRÈS que la navigation (si elle a eu lieu) soit terminée.
+          // Pour les modales, le useEffect de pendingModalPath s'en charge.
+          // Pour les non-modales, si router.replace est asynchrone, il faudrait un await ou un .then()
+          
+          // Si une navigation a été tentée (pour une route non modale) ou si aucune navigation n'a été restaurée, 
+          // on peut potentiellement remettre isNavigating à false ici,
+          // mais avec précaution pour ne pas interférer avec l'effet de pendingModalPath.
+          if (!savedPath || (savedPath && !savedPath.startsWith('/modals'))) {
+             // console.log("[AppState Listener] Final isNavigating reset for non-modal or no saved path scenario."); // LOG AJOUTÉ
+             setIsNavigating(false);
+          }
+          
+          // console.log('[AppState Listener] Scheduling setAppResuming(false) in 1500ms'); // LOG AJOUTÉ
+          setTimeout(() => {
+            // console.log('[AppState Listener] Executing delayed setAppResuming(false)'); // LOG AJOUTÉ
+            setAppResuming(false)
+          }, 1500);
         }
-        
-        setTimeout(() => {
-          console.log(`[AppState] Setting isAppResuming to false after 1500ms delay (post-auth-load).`);
-          setAppResuming(false);
-          // Remettre isNavigating à false. Cette variable d'état (isNavigating) est locale à RootLayout.
-          // Son rôle principal ici était de signaler aux autres useEffect de RootLayout (comme NavCheck)
-          // de ne pas interférer pendant que AppState orchestrait la restauration.
-          // Le useEffect de PendingModalNav a sa propre gestion de isNavigating pour son push.
-          console.log('[AppState] Resetting isNavigating (local to RootLayout) to false.');
-          setIsNavigating(false);
-        }, 1500); 
+      } else if (appStateRef.current === 'active' && nextAppState.match(/inactive|background/)) {
+        // console.log(`[AppState Listener] App going to background/inactive. Pathname: ${pathnameRef.current}. Scheduling save check.`); // LOG AJOUTÉ
+        // Augmenter le délai pour donner plus de temps à la navigation de se stabiliser
+        // et pour permettre à 'lastKnownRouteOverride' d'être potentiellement défini par une modale qui se ferme.
+        setTimeout(async () => {
+          // LOG AJOUTÉ : Début du check de sauvegarde
+          // console.log(`[AppState Listener Save Check] Checking path to save. Current pathnameRef: ${pathnameRef.current}`);
+          let pathToSave = null;
+          const overridePath = await AsyncStorage.getItem('lastKnownRouteOverride');
+
+          if (overridePath) {
+            // console.log(`[AppState] Found override path: ${overridePath}. Using it to save lastKnownRoute.`);
+            pathToSave = overridePath;
+            await AsyncStorage.removeItem('lastKnownRouteOverride'); // Consommer l'override
+          } else {
+            // Pas d'override, utiliser la valeur actuelle de pathnameRef
+            pathToSave = pathnameRef.current;
+            // console.log(`[AppState] No override path. Using current pathnameRef: ${pathToSave}`);
+          }
+
+          if (pathToSave && !pathToSave.startsWith('/(auth)')) {
+            // console.log(`[AppState Listener Save Check] SAVING lastKnownRoute: ${pathToSave}`); // LOG AJOUTÉ
+            await AsyncStorage.setItem('lastKnownRoute', pathToSave);
+          } else {
+            // console.log(`[AppState Listener Save Check] NOT saving path: ${pathToSave} (null or auth route)`); // LOG AJOUTÉ
+          }
+        }, 300); // Délai augmenté à 300ms
       }
+      // LOG AJOUTÉ : Fin du listener, mise à jour de appStateRef
+      // console.log(`[AppState Listener END] Updating appStateRef from ${appStateRef.current} to ${nextAppState}`);
+      appStateRef.current = nextAppState;
     });
 
     return () => {
+      // console.log('[RootLayout AppStateEffect] Cleaning up AppState listener.');
       subscription.remove();
     };
-  }, [setAppResuming, router, refreshSession, setPendingModalPath, setIsNavigating]);
+  }, [router, refreshSession, setAppResuming, setPendingModalPath, setIsNavigating]); // pathnameRef n'est pas une dépendance pour éviter les cycles
 
   // Configure audio mode
   useEffect(() => {
@@ -249,9 +337,9 @@ export default function RootLayout() {
           interruptionModeAndroid: 1, // Do not mix with other sounds
           playThroughEarpieceAndroid: false,
         });
-        console.log('Audio mode configured successfully (playsInSilentModeIOS: true).');
+        // console.log('Audio mode configured successfully (playsInSilentModeIOS: true).');
       } catch (error) {
-        console.error('Failed to set audio mode:', error);
+        // console.error('Failed to set audio mode:', error);
       }
     };
 
@@ -262,116 +350,56 @@ export default function RootLayout() {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
+    // console.log(`[RootLayout FontsEffect] Fonts loaded: ${fontsLoaded}`);
   }, [fontsLoaded]);
 
   // NOUVEAU: useEffect pour gérer la navigation des modales en attente
   // Placé ici avec les autres hooks, AVANT les returns conditionnels
   useEffect(() => {
-    // Ce useEffect gère la navigation vers une modale qui était ouverte
-    // lorsque l'application a été mise en arrière-plan.
-
+    // console.log(`[RootLayout PendingModalNav EFFECT EVAL] pendingModalPath: ${pendingModalPath}, isAppResuming: ${isAppResuming}, initialized: ${initialized}, loading: ${loading}, isNavigating (local): ${isNavigating}, session: ${!!session}, userProfile: ${!!userProfile}`);
+    
     if (pendingModalPath && !isAppResuming && initialized && !loading && session && userProfile) {
-      // Les conditions sont remplies pour tenter d'ouvrir la modale.
-      
-      // Vérifier si une navigation est DÉJÀ considérée comme en cours par cet effet.
-      // Normalement, isNavigating devrait être false ici si l'effet précédent a bien tout nettoyé.
       if (isNavigating) { 
-        console.log(`[RootLayout PendingModalNav] SKIPPING push for ${pendingModalPath} because isNavigating is already true.`);
-        // Si isNavigating est true, cela signifie qu'une tentative de navigation est en cours
-        // ou que l'état n'a pas été correctement réinitialisé.
-        // On ne fait rien pour éviter des push multiples.
-        // L'état devrait se résoudre (isNavigating devrait redevenir false).
-        return;
+        // console.log(`[RootLayout PendingModalNav] Navigation BLOCKED because isNavigating is already true. Pending: ${pendingModalPath}`);
+        return; // Si une navigation est déjà en cours, attendre qu'elle se termine.
       }
-
-      console.log(`[RootLayout PendingModalNav] Conditions MET. Attempting to PUSH modal from pendingModalPath: ${pendingModalPath}`);
-      
-      // Indiquer qu'une opération de navigation est en cours.
-      // Cela peut bloquer d'autres logiques de navigation dans RootLayout.
+      // console.log(`[RootLayout PendingModalNav] Attempting to PUSH modal from pendingModalPath: ${pendingModalPath}`);
       setIsNavigating(true);
-      let navigationAttempted = false;
-
       try {
         router.push(pendingModalPath as any);
-        navigationAttempted = true;
-        console.log(`[RootLayout PendingModalNav] router.push(${pendingModalPath}) called.`);
+        // On ne nettoie pas pendingModalPath ici, on le laisse pour que si l'utilisateur
+        // remet l'app en arrière-plan pendant que la modale est ouverte, le AppState listener
+        // puisse le voir et le sauvegarder correctement.
+        // Il sera nettoyé par AppState listener au prochain foregrounding S'IL est consommé,
+        // ou si la modale est fermée manuellement et que 'lastKnownRouteOverride' est utilisé.
+        // setPendingModalPath(null); // NON: Ne pas nettoyer ici.
       } catch (e) {
-        console.error('[RootLayout PendingModalNav] Error pushing modal:', e);
-        // En cas d'erreur, on essaie quand même de nettoyer.
+        // console.error("[RootLayout PendingModalNav] Error pushing modal:", e);
+        setPendingModalPath(null); // Nettoyer en cas d'erreur pour ne pas boucler.
       } finally {
-        // Ce bloc s'exécute que le try ait réussi ou levé une exception (si elle n'a pas fait sortir de la fonction).
-        console.log(`[RootLayout PendingModalNav] In finally. Navigation attempted: ${navigationAttempted}. Path: ${pendingModalPath}. Resetting states.`);
-        
-        // On nettoie le chemin de la modale en attente, car on a tenté de naviguer.
-        setPendingModalPath(null);
-        
-        // Très important : remettre isNavigating à false pour débloquer d'autres logiques
-        // et indiquer que cette tentative spécifique de navigation modale est terminée.
-        setIsNavigating(false);
-        console.log(`[RootLayout PendingModalNav] pendingModalPath set to null, isNavigating set to false.`);
+        // console.log("[RootLayout PendingModalNav] PUSH attempt finished. Resetting isNavigating to false.");
+        setIsNavigating(false); // Remettre à false que la navigation ait réussi ou échoué
       }
+    } else {
+        // console.log(`[RootLayout PendingModalNav EFFECT EVAL] Conditions NOT MET or no pendingModalPath. Values - pendingModalPath: ${pendingModalPath}, isAppResuming: ${isAppResuming}, initialized: ${initialized}, loading: ${loading}, isNavigating: ${isNavigating}, session: ${!!session}, userProfile: ${!!userProfile}`);
     }
-    // Il n'y a plus de timer à nettoyer spécifiquement pour isNavigating ici.
-    // isNavigating (l'état local) n'est PAS dans les dépendances de cet effet pour éviter des boucles
-    // si setIsNavigating(true) puis setIsNavigating(false) dans le même cycle logique le redéclenchait.
-    // L'effet est déclenché par les changements des états d'auth, de reprise de l'app, ou de pendingModalPath lui-même.
-  }, [pendingModalPath, isAppResuming, initialized, loading, session, userProfile, router, setPendingModalPath, setIsNavigating]); // Garder setIsNavigating comme dépendance car c'est une fonction du hook useState.
+  }, [pendingModalPath, isAppResuming, initialized, loading, session, userProfile, router, setIsNavigating, isNavigating]); // Ajout de isNavigating ici.
 
-  // NOUVEAU: Loader prioritaire si l'application reprend
-  // Cette vérification doit se faire APRÈS l'appel de tous les hooks.
+  // This hook will protect from navigation problems if the user is not yet authenticated
+  // It will also serve as the splash screen via the SegmentProvider
+  if (!initialized || !fontsLoaded) {
+    // console.log(`RootLayout: RENDERING LOADING SCREEN (initialized: ${initialized}, fontsLoaded: ${fontsLoaded})`);
+    return <LoadingScreen />;
+  }
+
+  // Show "Resuming..." screen if the app is resuming and not yet ready to show content.
+  // Prioritize this over the "Redirecting to login..." loader.
   if (isAppResuming) {
-    console.log('RootLayout: App is resuming, showing ResumingScreen...');
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#021a19', // Même fond que les autres loaders
-        }}
-      >
-        <ActivityIndicator size="large" color="#14b8a6" />
-        <Text
-          style={{
-            marginTop: 12,
-            color: '#5eead4',
-            // fontFamily: 'Inter-Regular', // Inter n'est peut-être pas encore chargé
-            fontSize: 14,
-          }}
-        >
-          Resuming...
-        </Text>
-      </View>
-    );
+    // console.log('!!!!!!!!!!!!!! RootLayout: RENDERING RESUMING SCREEN !!!!!!!!!!!!!!');
+    return <ResumingScreen />;
   }
 
-  // Show loading screen while fonts are loading OR auth is initializing OR if we are navigating
-  if (!fontsLoaded || !initialized || loading || isNavigating) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#021a19',
-        }}
-      >
-        <ActivityIndicator size="large" color="#14b8a6" />
-        <Text
-          style={{
-            marginTop: 12,
-            color: '#5eead4',
-            fontFamily: 'system-font',
-            fontSize: 14,
-          }}
-        >
-          Loading...
-        </Text>
-      </View>
-    );
-  }
-
-  // If there's no session and we are not in the auth group,
+  // If the user is not authenticated and not in the auth group, and app is NOT resuming,
   // display a loader while the redirection to login is happening.
   // This prevents a flash of the main app content.
   const inAuthGroup = segments[0] === '(auth)';
@@ -380,23 +408,16 @@ export default function RootLayout() {
 
   // On vérifie aussi si l'app n'est pas en train de reprendre pour éviter un flash du loader de redirection
   if (!isAuthenticated && !inAuthGroup && !isAppResuming) {
-    console.log('!!!!!!!!!!!!!! RootLayout: RENDERING REDIRECTING TO LOGIN LOADER !!!!!!!!!!!!!!');
-    console.log(`Values: isAuthenticated: ${isAuthenticated}, inAuthGroup: ${inAuthGroup}, isAppResuming: ${isAppResuming}, pathname: ${pathname}`);
+    // console.log('!!!!!!!!!!!!!! RootLayout: RENDERING REDIRECTING TO LOGIN LOADER !!!!!!!!!!!!!!');
+    // console.log(`Values: isAuthenticated: ${isAuthenticated}, inAuthGroup: ${inAuthGroup}, isAppResuming: ${isAppResuming}, pathname: ${pathname}`);
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#021a19',
-        }}
-      >
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#021a19' }}>
         <ActivityIndicator size="large" color="#14b8a6" />
         <Text
           style={{
             marginTop: 12,
             color: '#5eead4',
-            fontFamily: 'system-font', // Using a system font as Inter might not be loaded yet
+            fontFamily: 'system-font',
             fontSize: 14,
           }}
         >
@@ -423,7 +444,7 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="modals"
-          options={{
+          options={{ 
             animation: 'slide_from_bottom',
             presentation: 'modal',
             headerShown: false,

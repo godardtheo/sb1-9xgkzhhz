@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, AppState } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Info, Plus, CircleMinus as MinusCircle } from 'lucide-react-native';
 import { useState, useEffect, useRef } from 'react';
@@ -11,6 +11,17 @@ import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const FORM_STATE_WORKOUT_EDIT_KEY_PREFIX = 'formState_workout_edit_';
+
+// Using the existing Exercise type for saved state
+type SavedWorkoutEditState = {
+  name: string;
+  description: string;
+  exercises: Exercise[]; 
+  timestamp: number;
+};
 
 // Type for data coming FROM ExerciseModal
 type ModalExerciseSelection = {
@@ -42,6 +53,9 @@ type Exercise = {
 export default function EditWorkoutScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const workoutId = typeof id === 'string' ? id : undefined;
+  const FORM_STATE_KEY = workoutId ? `${FORM_STATE_WORKOUT_EDIT_KEY_PREFIX}${workoutId}` : null;
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showExerciseModal, setShowExerciseModal] = useState(false);
@@ -56,6 +70,9 @@ export default function EditWorkoutScreen() {
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
+  const appStateRef = useRef(AppState.currentState);
+  const [isRestoring, setIsRestoring] = useState(true); // To prevent saving while restoring/initial fetch
+  const [initialFetchComplete, setInitialFetchComplete] = useState(false);
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
@@ -92,22 +109,125 @@ export default function EditWorkoutScreen() {
     }, 0);
   };
 
-  useEffect(() => {
-    if (id) {
-      fetchWorkoutDetails();
+  // Function to save current form state
+  const saveCurrentFormState = async () => {
+    if (isRestoring || !initialFetchComplete) {
+      return;
     }
-  }, [id]);
+    if (!FORM_STATE_KEY) {
+      return;
+    }
+    try {
+      const formState: SavedWorkoutEditState = {
+        name,
+        description,
+        exercises,
+        timestamp: Date.now(),
+      };
+      await AsyncStorage.setItem(FORM_STATE_KEY, JSON.stringify(formState));
+    } catch (e) {
+      console.error(`[EditWorkoutScreen ${workoutId}] Failed to save form state:`, e);
+    }
+  };
+
+  // Effect for AppState changes (backgrounding)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+      } else if (
+        appStateRef.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        saveCurrentFormState();
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [name, description, exercises, isRestoring, initialFetchComplete, workoutId, FORM_STATE_KEY]);
+
+  // Effect for fetching initial details AND then trying to restore form state
+  useEffect(() => {
+    const loadAndTryRestore = async () => {
+      if (workoutId) {
+        setIsRestoring(true);
+        setInitialFetchComplete(false);
+        await fetchWorkoutDetails(); // This sets initial form state from DB
+        setInitialFetchComplete(true);
+
+        if (!FORM_STATE_KEY) {
+            setIsRestoring(false);
+            return;
+        }
+        try {
+          const savedStateString = await AsyncStorage.getItem(FORM_STATE_KEY);
+          if (savedStateString) {
+            const savedState: SavedWorkoutEditState = JSON.parse(savedStateString);
+            Alert.alert(
+              "Unsaved Changes",
+              "You have unsaved changes for this workout. Would you like to restore them?",
+              [
+                {
+                  text: "No",
+                  onPress: async () => {
+                    await AsyncStorage.removeItem(FORM_STATE_KEY);
+                    setIsRestoring(false);
+                  },
+                  style: "cancel"
+                },
+                {
+                  text: "Yes",
+                  onPress: async () => {
+                    setName(savedState.name);
+                    setDescription(savedState.description);
+                    setExercises(savedState.exercises || []);
+                    await AsyncStorage.removeItem(FORM_STATE_KEY);
+                    setIsRestoring(false);
+                  }
+                }
+              ],
+              { cancelable: false }
+            );
+          } else {
+            setIsRestoring(false); // No saved state
+          }
+        } catch (e) {
+          console.error(`[EditWorkoutScreen ${workoutId}] Failed to restore form state:`, e);
+          setIsRestoring(false);
+        }
+      } else {
+        setIsRestoring(false);
+        setInitialFetchComplete(true);
+      }
+    };
+
+    loadAndTryRestore();
+  }, [workoutId]); // workoutId is the main dependency here
 
   const fetchWorkoutDetails = async () => {
     try {
       setLoading(true);
       setError(null);
+      // Ensure workoutId is valid
+      if (!workoutId) {
+        setError("Workout ID is missing.");
+        setLoading(false);
+        setInitialFetchComplete(true);
+        setIsRestoring(false);
+        return;
+      }
 
       // First fetch the template basic info
       const { data: template, error: templateError } = await supabase
         .from('workout_templates')
         .select('*')
-        .eq('id', id)
+        .eq('id', workoutId)
         .single();
 
       if (templateError) throw templateError;
@@ -141,7 +261,7 @@ export default function EditWorkoutScreen() {
             order
           )
         `)
-        .eq('template_id', id)
+        .eq('template_id', workoutId)
         .order('order');
 
       if (exercisesError) throw exercisesError;
@@ -181,6 +301,11 @@ export default function EditWorkoutScreen() {
       setError(err.message);
     } finally {
       setLoading(false);
+      // Ensure these are set regardless of success/failure if fetch was attempted
+      if (workoutId) {
+        setInitialFetchComplete(true);
+        setIsRestoring(false); 
+      }
     }
   };
 
@@ -198,7 +323,7 @@ export default function EditWorkoutScreen() {
           estimated_duration: formattedDuration,
           updated_at: new Date().toISOString()
         })
-        .eq('id', id);
+        .eq('id', workoutId);
 
       if (templateError) throw templateError;
 
@@ -207,7 +332,7 @@ export default function EditWorkoutScreen() {
         const { error: exerciseError } = await supabase
           .from('template_exercises')
           .update({ order: i })
-          .eq('template_id', id)
+          .eq('template_id', workoutId)
           .eq('exercise_id', exercises[i].id);
 
         if (exerciseError) throw exerciseError;
@@ -219,7 +344,7 @@ export default function EditWorkoutScreen() {
         const { data: templateExercise, error: templateExerciseError } = await supabase
           .from('template_exercises')
           .select('id')
-          .eq('template_id', id)
+          .eq('template_id', workoutId)
           .eq('exercise_id', exercise.id)
           .single();
 
@@ -249,6 +374,15 @@ export default function EditWorkoutScreen() {
       }
 
       setNeedsRefresh(true);
+      // Clear any saved form state on successful save
+      if (FORM_STATE_KEY) {
+        try {
+          await AsyncStorage.removeItem(FORM_STATE_KEY);
+          await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+        } catch (e) {
+          console.error(`[EditWorkoutScreen ${workoutId}] Failed to clear form state or set lastKnownRouteOverride after save:`, e);
+        }
+      }
       router.back();
     } catch (err: any) {
       console.error('Error saving workout:', err);
@@ -262,15 +396,29 @@ export default function EditWorkoutScreen() {
     try {
       setLoading(true);
       setError(null);
+      if (!workoutId) {
+        setError("Workout ID is missing for delete.");
+        setLoading(false);
+        return;
+      }
 
       const { error: deleteError } = await supabase
         .from('workout_templates')
         .delete()
-        .eq('id', id);
+        .eq('id', workoutId);
 
       if (deleteError) throw deleteError;
 
       setNeedsRefresh(true);
+      // Clear any saved form state on successful delete
+      if (FORM_STATE_KEY) {
+        try {
+          await AsyncStorage.removeItem(FORM_STATE_KEY);
+          await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+        } catch (e) {
+          console.error(`[EditWorkoutScreen ${workoutId}] Failed to clear form state or set lastKnownRouteOverride after delete:`, e);
+        }
+      }
       router.back();
     } catch (error: any) {
       console.error('Error deleting workout:', error);
@@ -308,7 +456,7 @@ export default function EditWorkoutScreen() {
         const { data: templateExercise, error: addError } = await supabase
           .from('template_exercises')
           .insert({
-            template_id: id,
+            template_id: workoutId,
             exercise_id: selectedExercise.id, // Use ID from selection
             sets: 4, // Default number of sets
             rest_time: '00:02:00',
@@ -354,7 +502,7 @@ export default function EditWorkoutScreen() {
       const { data: templateExercise, error: findError } = await supabase
         .from('template_exercises')
         .select('id')
-        .eq('template_id', id)
+        .eq('template_id', workoutId)
         .eq('exercise_id', exerciseId)
         .single();
 
@@ -457,7 +605,13 @@ export default function EditWorkoutScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable 
-          onPress={() => router.back()}
+          onPress={async () => {
+            if (FORM_STATE_KEY) {
+              await AsyncStorage.removeItem(FORM_STATE_KEY);
+              await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+            }
+            router.back();
+          }}
           style={styles.backButton}
           hitSlop={8}
         >

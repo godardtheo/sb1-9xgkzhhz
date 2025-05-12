@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, StatusBar, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Info, Trash2, Plus, CircleMinus as MinusCircle, Dumbbell } from 'lucide-react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -12,6 +12,9 @@ import DraggableExerciseCard from '@/components/DraggableExerciseCard';
 import { formatDuration } from '@/lib/utils/formatDuration';
 import uuid from 'react-native-uuid';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const FORM_STATE_WORKOUT_NEW_KEY = 'formState_workout_new';
 
 // Type for data coming FROM ExerciseModal
 type ModalExerciseSelection = {
@@ -41,6 +44,14 @@ type Exercise = {
   totalExercises: number;
 };
 
+// Using the existing Exercise type for saved state
+type SavedWorkoutFormState = {
+  name: string;
+  description: string;
+  exercises: Exercise[]; 
+  timestamp: number;
+};
+
 export default function NewWorkoutScreen() {
   // console.log("[NewWorkoutScreen] Rendering component...");
   const router = useRouter();
@@ -55,6 +66,8 @@ export default function NewWorkoutScreen() {
   const scrollRef = useRef<ScrollView>(null);
   // Get safe area insets
   const insets = useSafeAreaInsets();
+  const appState = useRef(AppState.currentState);
+  const [isRestoring, setIsRestoring] = useState(true); // To prevent saving while restoring
 
   const totalExercises = exercises.length;
   const totalSets = exercises.reduce((acc, exercise) => acc + exercise.sets.length, 0);
@@ -182,6 +195,15 @@ export default function NewWorkoutScreen() {
       }
 
       setNeedsRefresh(true);
+      // Clear any saved form state on successful save
+      try {
+        await AsyncStorage.removeItem(FORM_STATE_WORKOUT_NEW_KEY);
+        // console.log('[NewWorkoutScreen] Form state cleared from AsyncStorage after successful save.');
+        await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+        // console.log('[NewWorkoutScreen] lastKnownRouteOverride set to /(tabs)/ after successful save.');
+      } catch (e) {
+        console.error('[NewWorkoutScreen] Failed to clear form state or set lastKnownRouteOverride after save:', e);
+      }
       router.back();
     } catch (error: any) {
       console.error('Error saving workout:', error);
@@ -266,6 +288,96 @@ export default function NewWorkoutScreen() {
     setExercises(prev => prev.filter(ex => ex.id !== exerciseId));
   };
 
+  // Function to save current form state
+  const saveCurrentFormState = async () => {
+    if (isRestoring) {
+      // console.log('[NewWorkoutScreen] Skipping save, still restoring or initial load.');
+      return;
+    }
+    try {
+      const formState: SavedWorkoutFormState = {
+        name,
+        description,
+        exercises,
+        timestamp: Date.now(),
+      };
+      await AsyncStorage.setItem(FORM_STATE_WORKOUT_NEW_KEY, JSON.stringify(formState));
+      // console.log('[NewWorkoutScreen] Form state saved to AsyncStorage.');
+    } catch (e) {
+      console.error('[NewWorkoutScreen] Failed to save form state:', e);
+    }
+  };
+
+  // Effect for AppState changes (backgrounding)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+      } else if (
+        appState.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // App is going to background
+        // console.log('[NewWorkoutScreen] App going to background, attempting to save form state.');
+        saveCurrentFormState();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [name, description, exercises, isRestoring]); // Dependencies ensure saveCurrentFormState has fresh data
+
+  // Effect for restoring form state on mount
+  useEffect(() => {
+    const tryRestoreFormState = async () => {
+      try {
+        const savedStateString = await AsyncStorage.getItem(FORM_STATE_WORKOUT_NEW_KEY);
+        if (savedStateString) {
+          const savedState: SavedWorkoutFormState = JSON.parse(savedStateString);
+          Alert.alert(
+            "Unsaved Changes",
+            "You have unsaved changes for this new workout. Would you like to restore them?",
+            [
+              {
+                text: "No",
+                onPress: async () => {
+                  await AsyncStorage.removeItem(FORM_STATE_WORKOUT_NEW_KEY);
+                  // console.log('[NewWorkoutScreen] User declined to restore. Saved state cleared.');
+                  setIsRestoring(false);
+                },
+                style: "cancel"
+              },
+              {
+                text: "Yes",
+                onPress: async () => {
+                  setName(savedState.name);
+                  setDescription(savedState.description);
+                  setExercises(savedState.exercises || []); 
+                  await AsyncStorage.removeItem(FORM_STATE_WORKOUT_NEW_KEY);
+                  // console.log('[NewWorkoutScreen] Form state restored. Saved state cleared.');
+                  setIsRestoring(false);
+                }
+              }
+            ],
+            { cancelable: false }
+          );
+        } else {
+          setIsRestoring(false); // No saved state
+        }
+      } catch (e) {
+        console.error('[NewWorkoutScreen] Failed to restore form state:', e);
+        setIsRestoring(false);
+      }
+    };
+
+    tryRestoreFormState();
+  }, []);
+
   // console.log("[NewWorkoutScreen] Starting return...");
   return (
     <View style={styles.container as any}>
@@ -274,7 +386,12 @@ export default function NewWorkoutScreen() {
         {/* {(() => { console.log("[NewWorkoutScreen] Rendering Header..."); return null; })()} */}
         <View style={styles.header as any}>
           <Pressable 
-            onPress={() => router.back()}
+            onPress={async () => {
+                // console.log('[NewWorkoutScreen] Back button pressed. Clearing form state and setting lastKnownRouteOverride.');
+                await AsyncStorage.removeItem(FORM_STATE_WORKOUT_NEW_KEY);
+                await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+                router.back();
+            }}
             style={styles.backButton as any}
             hitSlop={8}
           >

@@ -11,19 +11,20 @@ export default function AuthLayout() {
   useEffect(() => {
     let navigationTimer: number | null = null;
 
-    if (!initialized || isNavigating || isAppResuming || pendingModalPath) {
+    if (!initialized || isNavigating || pendingModalPath) {
       if (pendingModalPath) {
-        console.log(`[AuthLayout] Navigation BLOCKED due to pendingModalPath: ${pendingModalPath}`);
+        // console.log(`[AuthLayout] Navigation BLOCKED due to pendingModalPath: ${pendingModalPath}`);
       }
+      // console.log(`[AuthLayout] Navigation BLOCKED early: !initialized=${!initialized}, isNavigating=${isNavigating}, pendingModalPath=${pendingModalPath}`);
       return;
     }
     
     const isAuthenticated = session && userProfile;
     const isInAuthGroup = segments[0] === '(auth)';
 
-    if (isAuthenticated && isInAuthGroup) {
+    if (isAuthenticated && isInAuthGroup && !isAppResuming) {
       setIsNavigating(true);
-      console.log("Auth Layout: User is authenticated and in auth group (app not resuming), redirecting to home");
+      // console.log("Auth Layout: User is authenticated, in auth group, and app NOT resuming. Redirecting to home.");
       
       navigationTimer = setTimeout(() => {
         try {
@@ -31,7 +32,7 @@ export default function AuthLayout() {
         } catch (error) {
           console.error('Auth layout navigation error:', error);
         } finally {
-          // setIsNavigating(false);
+          setTimeout(() => setIsNavigating(false), 500);
         }
       }, 0);
     } else if (!isAuthenticated && !isInAuthGroup) {
@@ -39,6 +40,8 @@ export default function AuthLayout() {
       // on pourrait vouloir rediriger vers /login.
       // Mais RootLayout devrait déjà gérer ça. Pour l'instant, ne rien faire ici.
       // console.log("[AuthLayout] User not authenticated and not in auth group. RootLayout should handle redirection to login.");
+    } else if (isAuthenticated && isInAuthGroup && isAppResuming) {
+      // console.log("[AuthLayout] User authenticated, in auth group, BUT app IS resuming. Deferring redirection, AppState listener should handle route restoration.");
     }
 
     return () => {

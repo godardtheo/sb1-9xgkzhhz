@@ -17,22 +17,22 @@ export default function SignupScreen() {
   useEffect(() => {
     let navigationTimer: number | null = null; // Correct type for React Native
 
-    if (isAppResuming || authStorePendingModalPath) {
-      if (authStorePendingModalPath) {
-        console.log(`[SignupScreen] Navigation BLOCKED due to authStorePendingModalPath: ${authStorePendingModalPath}`);
-      }
+    if (authStorePendingModalPath) {
+      // console.log(`[SignupScreen] Navigation BLOCKED due to authStorePendingModalPath: ${authStorePendingModalPath}`);
       return;
     }
 
-    // segments est de type string[]. ex: ['(auth)', 'signup']
     const isCurrentlyOnAuthSignupRoute = segments[0] === '(auth)' && segments[1] === 'signup';
 
-    if (session && userProfile && isCurrentlyOnAuthSignupRoute) {
-      console.log("Signup: Session and profile detected on /signup (app not resuming), redirecting to home (after 100ms delay)");
+    if (session && userProfile && isCurrentlyOnAuthSignupRoute && !isAppResuming) {
+      // console.log("Signup: Session and profile detected on /signup, app NOT resuming. Redirecting to home (after 100ms delay).");
       navigationTimer = setTimeout(() => {
         router.replace('/(tabs)');
       }, 100);
+    } else if (session && userProfile && isCurrentlyOnAuthSignupRoute && isAppResuming) {
+      // console.log("Signup: Session and profile detected on /signup, BUT app IS resuming. Deferring redirection.");
     }
+
     return () => {
       if (navigationTimer) {
         clearTimeout(navigationTimer);

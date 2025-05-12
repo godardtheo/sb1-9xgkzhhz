@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Platform, ActivityIndicator, Switch, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Platform, ActivityIndicator, Switch, Alert, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Info, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
@@ -11,6 +11,17 @@ import ActiveProgramModal from '@/components/ActiveProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const FORM_STATE_PROGRAM_NEW_KEY = 'formState_program_new';
+
+type SavedProgramFormState = {
+  name: string;
+  description: string;
+  isActive: boolean;
+  workouts: SelectedWorkout[];
+  timestamp: number; // To potentially expire old saves
+};
 
 // Define the structure for muscle counts
 type MuscleCount = {
@@ -51,6 +62,109 @@ export default function NewProgramScreen() {
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
+  const appState = useRef(AppState.currentState);
+  const [isRestoring, setIsRestoring] = useState(true); // To prevent saving while restoring
+
+  // Function to save current form state
+  const saveCurrentFormState = async () => {
+    if (isRestoring) {
+      // console.log('[NewProgramScreen] Skipping save, still restoring or initial load.');
+      return;
+    }
+    try {
+      const formState: SavedProgramFormState = {
+        name,
+        description,
+        isActive,
+        workouts,
+        timestamp: Date.now(),
+      };
+      await AsyncStorage.setItem(FORM_STATE_PROGRAM_NEW_KEY, JSON.stringify(formState));
+      // console.log('[NewProgramScreen] Form state saved to AsyncStorage.');
+    } catch (e) {
+      console.error('[NewProgramScreen] Failed to save form state:', e);
+    }
+  };
+
+  // Effect for AppState changes (backgrounding)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground, restoration logic is handled on mount
+      } else if (
+        appState.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // App is going to background
+        // console.log('[NewProgramScreen] App going to background, attempting to save form state.');
+        saveCurrentFormState();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [name, description, isActive, workouts, isRestoring]); // Dependencies ensure saveCurrentFormState has fresh data
+
+  // Effect for restoring form state on mount
+  useEffect(() => {
+    const tryRestoreFormState = async () => {
+      try {
+        const savedStateString = await AsyncStorage.getItem(FORM_STATE_PROGRAM_NEW_KEY);
+        if (savedStateString) {
+          const savedState: SavedProgramFormState = JSON.parse(savedStateString);
+          // Optional: Check timestamp to see if the save is too old, e.g., > 24 hours
+          // const oneDay = 24 * 60 * 60 * 1000;
+          // if (Date.now() - savedState.timestamp > oneDay) {
+          //   // console.log('[NewProgramScreen] Saved state is too old, discarding.');
+          //   await AsyncStorage.removeItem(FORM_STATE_PROGRAM_NEW_KEY);
+          //   setIsRestoring(false);
+          //   return;
+          // }
+          
+          Alert.alert(
+            "Unsaved Changes",
+            "You have unsaved changes for this new program. Would you like to restore them?",
+            [
+              {
+                text: "No",
+                onPress: async () => {
+                  await AsyncStorage.removeItem(FORM_STATE_PROGRAM_NEW_KEY);
+                  // console.log('[NewProgramScreen] User declined to restore. Saved state cleared.');
+                  setIsRestoring(false);
+                },
+                style: "cancel"
+              },
+              {
+                text: "Yes",
+                onPress: async () => {
+                  setName(savedState.name);
+                  setDescription(savedState.description);
+                  setIsActive(savedState.isActive);
+                  setWorkouts(savedState.workouts || []); // Ensure workouts is not undefined
+                  await AsyncStorage.removeItem(FORM_STATE_PROGRAM_NEW_KEY);
+                  // console.log('[NewProgramScreen] Form state restored. Saved state cleared.');
+                  setIsRestoring(false);
+                }
+              }
+            ],
+            { cancelable: false }
+          );
+        } else {
+          setIsRestoring(false); // No saved state
+        }
+      } catch (e) {
+        console.error('[NewProgramScreen] Failed to restore form state:', e);
+        setIsRestoring(false);
+      }
+    };
+
+    tryRestoreFormState();
+  }, []);
 
   // Handle active toggle changes
   const handleActiveToggle = (value: boolean) => {
@@ -166,6 +280,16 @@ export default function NewProgramScreen() {
 
       // Notify that program store needs refresh
       setNeedsRefresh(true);
+      
+      // Clear any saved form state on successful save
+      try {
+        await AsyncStorage.removeItem(FORM_STATE_PROGRAM_NEW_KEY);
+        // console.log('[NewProgramScreen] Form state cleared from AsyncStorage after successful save.');
+        await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+        // console.log('[NewProgramScreen] lastKnownRouteOverride set to /(tabs)/ after successful save.');
+      } catch (e) {
+        console.error('[NewProgramScreen] Failed to clear form state or set lastKnownRouteOverride after save:', e);
+      }
       
       // Show success message and redirect
       setSaveSuccess(true);
@@ -314,7 +438,12 @@ export default function NewProgramScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable 
-          onPress={() => router.back()}
+          onPress={async () => {
+            // console.log('[NewProgramScreen] Back button pressed. Clearing form state and setting lastKnownRouteOverride.');
+            await AsyncStorage.removeItem(FORM_STATE_PROGRAM_NEW_KEY);
+            await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+            router.back();
+          }}
           style={styles.backButton}
           hitSlop={8}
         >

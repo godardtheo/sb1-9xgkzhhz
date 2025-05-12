@@ -170,7 +170,6 @@ export default function LiveWorkoutScreen() {
       );
       setSound(sound);
     } catch (error) {
-      console.error('Error loading sound:', error);
     }
   };
 
@@ -181,7 +180,6 @@ export default function LiveWorkoutScreen() {
         await sound.setPositionAsync(0);
         await sound.playAsync();
       } catch (error) {
-        console.error('Error playing sound:', error);
       }
     }
   };
@@ -311,7 +309,6 @@ export default function LiveWorkoutScreen() {
         }
       }
     } catch (err: any) {
-      console.error('Error loading workout template:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -321,8 +318,6 @@ export default function LiveWorkoutScreen() {
   const getPreviousPerformance = async (exerciseId: string) => {
     try {
       if (!userProfile?.id) return [];
-
-      console.log("Fetching previous performance for exercise:", exerciseId);
 
       // Get the most recent workout exercise for this exercise
       const { data: workoutExercises, error: workoutError } = await supabase
@@ -338,16 +333,11 @@ export default function LiveWorkoutScreen() {
         .limit(1);
 
       if (workoutError) {
-        console.log("Error fetching workout exercises:", workoutError.message);
-        console.log("Error details:", workoutError);
         return [];
       }
 
       if (!workoutExercises || workoutExercises.length === 0) {
-        console.log("No previous workout exercises found for exercise:", exerciseId);
-        
         // Essayer une approche alternative avec workout_id au lieu de parent_workout_id
-        console.log("Trying alternative approach with workout_id...");
         const { data: altWorkoutExercises, error: altError } = await supabase
           .from('workout_exercises')
           .select(`
@@ -361,11 +351,8 @@ export default function LiveWorkoutScreen() {
           .limit(1);
           
         if (altError || !altWorkoutExercises || altWorkoutExercises.length === 0) {
-          console.log("Alternative approach also failed:", altError?.message);
           return [];
         }
-        
-        console.log("Found workout exercise with alternative approach:", altWorkoutExercises[0].id);
         
         // Continue with the alternative data
         const { data: setData, error: setError } = await supabase
@@ -375,11 +362,8 @@ export default function LiveWorkoutScreen() {
           .order('set_order');
           
         if (setError || !setData || setData.length === 0) {
-          console.log("No set data found with alternative approach.");
           return [];
         }
-        
-        console.log("Found previous sets with alternative approach:", setData.length);
         
         return setData.map(set => ({
           reps: set.rep_count.toString(),
@@ -387,8 +371,6 @@ export default function LiveWorkoutScreen() {
           set_order: set.set_order
         }));
       }
-
-      console.log("Found previous workout exercise:", workoutExercises[0].id);
 
       // Get the sets for this exercise in that workout
       const { data: setData, error: setError } = await supabase
@@ -398,13 +380,10 @@ export default function LiveWorkoutScreen() {
         .order('set_order');
 
       if (setError) {
-        console.log("Error fetching set data:", setError.message);
         return [];
       }
 
       if (!setData || setData.length === 0) {
-        console.log("No set data found for workout exercise:", workoutExercises[0].id);
-        
         // Essayer une approche alternative si la table sets ne renvoie rien
         // Certaines versions de la base de données stockent les informations de sets directement dans workout_exercises
         const { data: exerciseDetails, error: exerciseError } = await supabase
@@ -420,23 +399,18 @@ export default function LiveWorkoutScreen() {
               ? JSON.parse(exerciseDetails.sets) 
               : exerciseDetails.sets;
               
-            console.log("Using sets from workout_exercises:", setArray.length);
-            
             return Array.isArray(setArray) ? setArray.map((set, index) => ({
               reps: (set.reps || set.rep_count || "0").toString(),
               weight: (set.weight || "0").toString(),
               set_order: set.order || set.set_order || index
             })) : [];
           } catch (e) {
-            console.error("Error parsing sets from workout_exercises:", e);
             return [];
           }
         }
         
         return [];
       }
-
-      console.log("Found previous sets:", setData.length);
 
       // Format the set data to include both rep_count and weight
       return setData.map(set => ({
@@ -446,7 +420,6 @@ export default function LiveWorkoutScreen() {
       }));
       
     } catch (error) {
-      console.error('Error fetching previous performance:', error);
       return [];
     }
   };
@@ -536,7 +509,6 @@ export default function LiveWorkoutScreen() {
 
     try {
       setIsSaving(true);
-      console.log('Starting workout save process...');
 
       // Stop timers
       if (displayTimerRef.current) clearInterval(displayTimerRef.current);
@@ -548,7 +520,6 @@ export default function LiveWorkoutScreen() {
       if (!user) throw new Error('User not authenticated');
 
       // Step 1: Create the workout
-      console.log('Creating workout record...');
       const { data: workoutId, error: workoutError } = await supabase.rpc(
         'create_workout',
         {
@@ -561,7 +532,6 @@ export default function LiveWorkoutScreen() {
       );
 
       if (workoutError) throw workoutError;
-      console.log('Workout created with ID:', workoutId);
 
       // Step 2: Process each exercise
       for (const [index, exercise] of exercises.entries()) {
@@ -569,8 +539,6 @@ export default function LiveWorkoutScreen() {
         const completedSets = exercise.sets.filter(set => set.completed);
         
         if (completedSets.length > 0) {
-          console.log(`Processing exercise ${index + 1}/${exercises.length}: ${exercise.name}`);
-          
           // Create workout exercise
           const { data: workoutExerciseId, error: exerciseError } = await supabase.rpc(
             'create_workout_exercise',
@@ -583,7 +551,6 @@ export default function LiveWorkoutScreen() {
           );
 
           if (exerciseError) throw exerciseError;
-          console.log('Workout exercise created with ID:', workoutExerciseId);
 
           // Step 3: Save the sets
           const setsData = completedSets.map((set, setIndex) => ({
@@ -601,11 +568,8 @@ export default function LiveWorkoutScreen() {
           );
 
           if (setsError) throw setsError;
-          console.log(`Saved ${completedSets.length} sets for exercise`);
         }
       }
-
-      console.log('Workout saved successfully!');
       
       setIsWorkoutFinished(true);
       // End the workout in global state
@@ -615,7 +579,6 @@ export default function LiveWorkoutScreen() {
       setShowFinishModal(false);
       router.replace('/(tabs)');
     } catch (err: any) {
-      console.error('Error saving workout:', err);
       Alert.alert('Error', `Failed to save workout: ${err.message}`);
     } finally {
       setIsSaving(false);

@@ -66,15 +66,9 @@ export default function ExerciseDetailsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.error('[ExerciseDetails] fetchUserWeightUnit: No authenticated user found');
         return;
       }
 
-      console.log(`[ExerciseDetails] fetchUserWeightUnit: User ID from AuthStore: ${user.id}`); 
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log(`[ExerciseDetails] fetchUserWeightUnit: Current auth.uid() from session: ${session?.user?.id}`);
-
-      console.log(`[ExerciseDetails] fetchUserWeightUnit: Querying public.users for ID: ${user.id}`); // Log the user ID
       const { data, error } = await supabase
         .schema('public')
         .from('users')
@@ -83,17 +77,13 @@ export default function ExerciseDetailsScreen() {
         .single();
       
       if (error) {
-        console.error('[ExerciseDetails] fetchUserWeightUnit: Error fetching user weight unit:', JSON.stringify(error, null, 2));
         return;
       }
 
       if (data && data.weight_unit) {
         setWeightUnit(data.weight_unit);
-      } else {
-        console.log('[ExerciseDetails] fetchUserWeightUnit: No weight unit found in profile, using default.');
       }
     } catch (error) {
-      console.error('[ExerciseDetails] fetchUserWeightUnit: CATCH block error:', error);
     }
   };
 
@@ -106,7 +96,6 @@ export default function ExerciseDetailsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.error('[ExerciseDetails] fetchExerciseDetails: No authenticated user found');
         setLoading(false); // Ensure loading stops
         return;
       }
@@ -118,7 +107,6 @@ export default function ExerciseDetailsScreen() {
         .single();
       
       if (error) {
-        console.error('[ExerciseDetails] fetchExerciseDetails: Error fetching exercise:', JSON.stringify(error, null, 2));
         setLoading(false); // Ensure loading stops
         return;
       }
@@ -129,10 +117,6 @@ export default function ExerciseDetailsScreen() {
         .eq('user_id', user.id)
         .eq('exercise_id', id)
         .maybeSingle();
-      
-      if (favoriteError) {
-        console.warn('[ExerciseDetails] fetchExerciseDetails: Error checking favorite status:', JSON.stringify(favoriteError, null, 2));
-      }
 
       setExercise(exerciseData);
       setFavorite(!!favoriteData);
@@ -140,7 +124,6 @@ export default function ExerciseDetailsScreen() {
       await fetchExerciseHistory(String(id)); // Ensure this completes before setting loading false
 
     } catch (error) {
-      console.error('[ExerciseDetails] fetchExerciseDetails: CATCH block error:', error);
     } finally {
       setLoading(false);
     }
@@ -156,7 +139,6 @@ export default function ExerciseDetailsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.error('[ExerciseDetails] fetchExerciseHistory: No authenticated user found');
         setHistoryLoading(false); // Ensure loading stops
         return;
       }
@@ -173,7 +155,6 @@ export default function ExerciseDetailsScreen() {
         .limit(5);
 
       if (error) {
-        console.error('[ExerciseDetails] fetchExerciseHistory: Error fetching workout exercises:', JSON.stringify(error, null, 2));
         setHistoryLoading(false); // Ensure loading stops
         return;
       }
@@ -181,7 +162,6 @@ export default function ExerciseDetailsScreen() {
       const historyItems: ExerciseHistory[] = [];
       for (const item of data || []) {
         if (!item.workouts) {
-            console.warn(`[ExerciseDetails] fetchExerciseHistory: Skipping item ${item.id} due to missing workout data.`);
             continue;
         }
         
@@ -193,7 +173,6 @@ export default function ExerciseDetailsScreen() {
           .order('set_order');
 
         if (setsError) {
-          console.error(`[ExerciseDetails] fetchExerciseHistory: Error fetching sets for item ${item.id}:`, JSON.stringify(setsError, null, 2));
           continue; // Continue to next item if sets fail
         }
 
@@ -213,7 +192,6 @@ export default function ExerciseDetailsScreen() {
 
       setHistory(historyItems);
     } catch (error) {
-      console.error('[ExerciseDetails] fetchExerciseHistory: CATCH block error:', error);
     } finally {
       setHistoryLoading(false);
     }
@@ -230,7 +208,6 @@ export default function ExerciseDetailsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        console.error('No authenticated user found');
         setFavorite(favorite); // Revert on error
         return;
       }
@@ -247,7 +224,6 @@ export default function ExerciseDetailsScreen() {
         if (error) {
           // Revert optimistic update on error
           setFavorite(favorite);
-          console.error('Error adding to favorites:', error);
         }
       } else {
         // Remove from favorites
@@ -262,13 +238,11 @@ export default function ExerciseDetailsScreen() {
         if (error) {
           // Revert optimistic update on error
           setFavorite(favorite);
-          console.error('Error removing from favorites:', error);
         }
       }
     } catch (error) {
       // Revert optimistic update on error
       setFavorite(favorite);
-      console.error('Error toggling favorite:', error);
     }
   };
 

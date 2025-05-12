@@ -81,7 +81,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     },
     fetch: async (url, options = {}) => {
       const requestUrl = typeof url === 'string' ? url : (url as Request).url;
-      console.log('[SupabaseClient Fetch] Global fetch intercepting:', requestUrl, options);
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.log('[SupabaseClient Fetch] Global fetch intercepting:', requestUrl, options);
+      }
 
       // We will NOT manually add the Authorization header here anymore.
       // Trust the Supabase client (GoTrueClient, PostgrestClient) to add its own auth headers.
@@ -92,31 +94,41 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       
       while (attempts < maxAttempts) {
         try {
-          console.log(`[SupabaseClient Fetch] Attempt ${attempts + 1}/${maxAttempts} for ${requestUrl}`);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.log(`[SupabaseClient Fetch] Attempt ${attempts + 1}/${maxAttempts} for ${requestUrl}`);
+          }
           
           // Use the options as passed by the Supabase client, which should include its own auth headers if needed.
           const response = await fetch(url, {
             ...options,
           });
 
-          console.log(`[SupabaseClient Fetch] Response status for ${requestUrl}: ${response.status}`);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.log(`[SupabaseClient Fetch] Response status for ${requestUrl}: ${response.status}`);
+          }
 
           if (response.status === 401) {
             let errorBody = {}; // Default to empty object
             try {
                 errorBody = await response.clone().json(); // Clone to read body safely
             } catch (e) {
-                console.warn('[SupabaseClient Fetch] Could not parse JSON from 401 response body for', requestUrl);
+                if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                    console.warn('[SupabaseClient Fetch] Could not parse JSON from 401 response body for', requestUrl);
+                }
                 // errorBody remains {}
             }
-            console.log('[SupabaseClient Fetch] Received 401', { requestUrl, errorBody });
+            if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                console.log('[SupabaseClient Fetch] Received 401', { requestUrl, errorBody });
+            }
 
             // Check for typical Supabase JWT error messages
             const bodyAsAny = errorBody as any;
             if (bodyAsAny?.msg?.toLowerCase().includes('invalid jwt') || 
                 bodyAsAny?.message?.toLowerCase().includes('jwt') || 
                 bodyAsAny?.error_description?.toLowerCase().includes('invalid jwt')) {
-              console.warn('[SupabaseClient Fetch] Invalid JWT detected. Throwing specific error.', { requestUrl });
+              if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                console.warn('[SupabaseClient Fetch] Invalid JWT detected. Throwing specific error.', { requestUrl });
+              }
               // Throw a specific error that can be caught by the calling function or auth store logic
               // This helps differentiate from other network or server errors.
               throw new Error('Invalid JWT Detected'); // Specific, catchable error message
@@ -137,7 +149,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
         } catch (error: any) {
           attempts++;
-          console.warn(`[SupabaseClient Fetch] Attempt ${attempts}/${maxAttempts} FAILED for ${requestUrl}:`, error.message);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.warn(`[SupabaseClient Fetch] Attempt ${attempts}/${maxAttempts} FAILED for ${requestUrl}:`, error.message);
+          }
           
           // If it's our specific JWT error, re-throw immediately, don't retry.
           if (error.message === 'Invalid JWT Detected') {
@@ -151,7 +165,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
           }
           
           const delay = 1000 * Math.pow(2, attempts - 1); // Exponential backoff
-          console.log(`[SupabaseClient Fetch] Waiting ${delay}ms before next attempt for ${requestUrl}`);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.log(`[SupabaseClient Fetch] Waiting ${delay}ms before next attempt for ${requestUrl}`);
+          }
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }

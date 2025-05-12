@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, Switch, LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Platform, ScrollView, Alert, Switch, LayoutChangeEvent, AppState } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Info, Plus, ChevronRight } from 'lucide-react-native';
 import { useState, useEffect, useRef } from 'react';
@@ -12,6 +12,18 @@ import DeleteProgramModal from '@/components/DeleteProgramModal';
 import { useProgramStore } from '@/lib/store/programStore';
 import { formatDuration, parseDurationToMinutes } from '@/lib/utils/formatDuration';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Key will be dynamic: `formState_program_edit_${id}`
+const FORM_STATE_PROGRAM_EDIT_KEY_PREFIX = 'formState_program_edit_';
+
+type SavedProgramEditState = {
+  name: string;
+  description: string;
+  isActive: boolean;
+  workouts: ProgramWorkout[]; // Using ProgramWorkout type as defined in this file
+  timestamp: number;
+};
 
 // Define the structure for muscle counts
 type MuscleCount = {
@@ -36,6 +48,9 @@ type ProgramWorkout = {
 export default function EditProgramScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const programId = typeof id === 'string' ? id : undefined;
+  const FORM_STATE_KEY = programId ? `${FORM_STATE_PROGRAM_EDIT_KEY_PREFIX}${programId}` : null;
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(false);
@@ -56,6 +71,9 @@ export default function EditProgramScreen() {
   
   // Get safe area insets
   const insets = useSafeAreaInsets();
+  const appStateRef = useRef(AppState.currentState);
+  const [isRestoring, setIsRestoring] = useState(true); // To prevent saving while restoring/initial fetch
+  const [initialFetchComplete, setInitialFetchComplete] = useState(false);
 
   // Fonction locale pour mettre à jour le state local itemHeights
   const updateLocalItemHeight = (index: number, height: number) => {
@@ -66,10 +84,114 @@ export default function EditProgramScreen() {
         newHeights.push(0);
       }
       newHeights[index] = height;
-      console.log(`[Parent updateLocalItemHeight - [id].tsx] Updated local state index ${index}=${height}. Full array:`, JSON.stringify(newHeights));
       return newHeights;
     });
   };
+
+  // Function to save current form state
+  const saveCurrentFormState = async () => {
+    if (isRestoring || !initialFetchComplete) {
+      return;
+    }
+    if (!FORM_STATE_KEY) {
+      return;
+    }
+    try {
+      const formState: SavedProgramEditState = {
+        name,
+        description,
+        isActive,
+        workouts,
+        timestamp: Date.now(),
+      };
+      await AsyncStorage.setItem(FORM_STATE_KEY, JSON.stringify(formState));
+    } catch (e) {
+      console.error(`[EditProgramScreen ${programId}] Failed to save form state:`, e);
+    }
+  };
+
+  // Effect for AppState changes (backgrounding)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+      } else if (
+        appStateRef.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        saveCurrentFormState();
+      }
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  // Add all form state variables as dependencies to ensure saveCurrentFormState has fresh data
+  }, [name, description, isActive, workouts, isRestoring, initialFetchComplete, programId, FORM_STATE_KEY]);
+
+  // Effect for fetching initial details AND then trying to restore form state
+  useEffect(() => {
+    const loadAndTryRestore = async () => {
+      if (programId) {
+        setIsRestoring(true); // Start with restoring true
+        setInitialFetchComplete(false);
+        await fetchProgramDetails(); // This sets initial form state from DB
+        setInitialFetchComplete(true);
+
+        // Now try to restore from AsyncStorage
+        if (!FORM_STATE_KEY) {
+            setIsRestoring(false);
+            return;
+        }
+        try {
+          const savedStateString = await AsyncStorage.getItem(FORM_STATE_KEY);
+          if (savedStateString) {
+            const savedState: SavedProgramEditState = JSON.parse(savedStateString);
+            Alert.alert(
+              "Unsaved Changes",
+              "You have unsaved changes for this program. Would you like to restore them?",
+              [
+                {
+                  text: "No",
+                  onPress: async () => {
+                    await AsyncStorage.removeItem(FORM_STATE_KEY);
+                    setIsRestoring(false);
+                  },
+                  style: "cancel"
+                },
+                {
+                  text: "Yes",
+                  onPress: async () => {
+                    setName(savedState.name);
+                    setDescription(savedState.description);
+                    setIsActive(savedState.isActive);
+                    setWorkouts(savedState.workouts || []);
+                    await AsyncStorage.removeItem(FORM_STATE_KEY);
+                    setIsRestoring(false);
+                  }
+                }
+              ],
+              { cancelable: false }
+            );
+          } else {
+            setIsRestoring(false); // No saved state
+          }
+        } catch (e) {
+          console.error(`[EditProgramScreen ${programId}] Failed to restore form state:`, e);
+          setIsRestoring(false);
+        }
+      } else {
+        setIsRestoring(false); // No programId
+        setInitialFetchComplete(true); // No fetch to complete
+      }
+    };
+
+    loadAndTryRestore();
+  }, [programId]); // programId is the main dependency here; FORM_STATE_KEY is derived
 
   useEffect(() => {
     if (id) {
@@ -111,6 +233,14 @@ export default function EditProgramScreen() {
     try {
       setLoading(true);
       setError(null);
+      // Ensure programId is valid before proceeding
+      if (!programId) {
+        setError("Program ID is missing.");
+        setLoading(false);
+        setInitialFetchComplete(true); // Mark as complete even if error
+        setIsRestoring(false); // Stop restoring process
+        return;
+      }
 
       // Fetch program basic info
       const { data: program, error: programError } = await supabase
@@ -145,6 +275,8 @@ export default function EditProgramScreen() {
       if (!programWorkoutsData || programWorkoutsData.length === 0) {
         setWorkouts([]);
         setLoading(false);
+        setInitialFetchComplete(true); // Mark as complete even if no workouts
+        setIsRestoring(false); // Stop restoring process
         return;
       }
 
@@ -250,6 +382,8 @@ export default function EditProgramScreen() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setInitialFetchComplete(true); // Mark as complete even if error
+      setIsRestoring(false); // Stop restoring process
     }
   };
 
@@ -313,6 +447,16 @@ export default function EditProgramScreen() {
       // Notify that program store needs refresh
       setNeedsRefresh(true);
       
+      // Clear any saved form state on successful save
+      if (FORM_STATE_KEY) {
+        try {
+          await AsyncStorage.removeItem(FORM_STATE_KEY);
+          await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+        } catch (e) {
+          console.error(`[EditProgramScreen ${programId}] Failed to clear form state or set lastKnownRouteOverride after save:`, e);
+        }
+      }
+      
       Alert.alert('Success', 'Program updated successfully');
       router.back();
     } catch (err: any) {
@@ -327,6 +471,11 @@ export default function EditProgramScreen() {
     try {
       setLoading(true);
       setError(null);
+      if (!programId) {
+        setError("Program ID is missing for delete.");
+        setLoading(false);
+        return;
+      }
 
       const { error: deleteError } = await supabase
         .from('programs')
@@ -336,6 +485,15 @@ export default function EditProgramScreen() {
       if (deleteError) throw deleteError;
 
       setNeedsRefresh(true);
+      // Clear any saved form state on successful delete
+      if (FORM_STATE_KEY) {
+        try {
+          await AsyncStorage.removeItem(FORM_STATE_KEY);
+          await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+        } catch (e) {
+          console.error(`[EditProgramScreen ${programId}] Failed to clear form state or set lastKnownRouteOverride after delete:`, e);
+        }
+      }
       router.back();
     } catch (err: any) {
       console.error('Error deleting program:', err);
@@ -544,7 +702,13 @@ export default function EditProgramScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Platform.OS === 'android' ? insets.top + 8 : 24 }]}>
         <Pressable 
-          onPress={() => router.back()}
+          onPress={async () => {
+            if (FORM_STATE_KEY) {
+              await AsyncStorage.removeItem(FORM_STATE_KEY);
+              await AsyncStorage.setItem('lastKnownRouteOverride', '/(tabs)/'); // Définir l'override
+            }
+            router.back();
+          }}
           style={styles.backButton}
           hitSlop={8}
         >
