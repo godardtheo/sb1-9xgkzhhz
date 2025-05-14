@@ -15,14 +15,17 @@ module.exports = {
     assetBundlePatterns: ["**/*"],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.yourcompany.setlog"
+      bundleIdentifier: "com.godapps.setlog",
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false
+      }
     },
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#021a19"
       },
-      package: "com.yourcompany.setlog"
+      package: "com.godapps.setlog"
     },
     web: {
       bundler: "metro",
@@ -39,7 +42,7 @@ module.exports = {
         origin: false
       },
       eas: {
-        projectId: "your-project-id"
+        projectId: "cb09b759-13c4-411c-aa62-448f884495ef"
       },
       EXPO_PUBLIC_ENV: process.env.EXPO_PUBLIC_ENV || 'dev'
     },
