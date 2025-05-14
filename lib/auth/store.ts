@@ -286,17 +286,17 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     signOut: async (): Promise<void> => {
-      set({ loading: true, error: null });
-      
-      clearRefreshTimeout();
-      set({ userProfile: null });
-      
-      const { error } = await supabase.auth.signOut();
-      
-      set({ session: null });
-      
-      if (error) {
-        console.error('Sign out API error:', error.message);
+        set({ loading: true, error: null });
+        
+        clearRefreshTimeout();
+        set({ userProfile: null });
+        
+        const { error } = await supabase.auth.signOut();
+        
+        set({ session: null });
+        
+        if (error) {
+          console.error('Sign out API error:', error.message);
       }
     },
   };

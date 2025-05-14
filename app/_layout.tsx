@@ -385,10 +385,19 @@ export default function RootLayout() {
     }
   }, [pendingModalPath, isAppResuming, initialized, loading, session, userProfile, router, setIsNavigating, isNavigating]); // Ajout de isNavigating ici.
 
+  // NOUVEAU: Effet pour nettoyer pendingModalPath si on quitte une modale restaurée
+  useEffect(() => {
+    // console.log(`[RootLayout ClearPendingModalPathIfNavigatedAway EFFECT EVAL] Pathname: ${pathname}, PendingModalPath: ${pendingModalPath}, IsAppResuming: ${isAppResuming}`);
+    if (!isAppResuming && pendingModalPath && pathname && !pathname.startsWith('/modals')) {
+      // console.log(`[RootLayout ClearPendingModalPathIfNavigatedAway] Pathname (${pathname}) is not a modal, but pendingModalPath (${pendingModalPath}) was set. Clearing pendingModalPath. IsAppResuming: ${isAppResuming}`);
+      setPendingModalPath(null);
+    }
+  }, [pathname, pendingModalPath, setPendingModalPath, isAppResuming]); // Ajout de isAppResuming ici
+
   // This hook will protect from navigation problems if the user is not yet authenticated
   // It will also serve as the splash screen via the SegmentProvider
-  if (!initialized || !fontsLoaded) {
-    // console.log(`RootLayout: RENDERING LOADING SCREEN (initialized: ${initialized}, fontsLoaded: ${fontsLoaded})`);
+  if (!initialized || !fontsLoaded || loading) {
+    // console.log(`RootLayout: RENDERING LOADING SCREEN (initialized: ${initialized}, fontsLoaded: ${fontsLoaded}, loading: ${loading})`);
     return <LoadingScreen />;
   }
 

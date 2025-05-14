@@ -1,6 +1,6 @@
 module.exports = {
   expo: {
-    name: "setlog",
+    name: "SetLog",
     slug: "setlog",
     version: "1.0.0",
     orientation: "portrait",
