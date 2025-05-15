@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform } from 'react-native';
-import { ChevronRight, Mail, Globe, LogOut, Shield, HelpCircle, Menu } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Platform, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { ChevronRight, Mail, Globe, LogOut, Shield, HelpCircle, Menu, Trash2 } from 'lucide-react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
+import { supabase } from '@/lib/supabase';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
 import EditProfileModal from '@/components/EditProfileModal';
 import HelpFAQModal from '@/components/HelpFAQModal';
@@ -23,6 +24,7 @@ export default function SettingsScreen() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   
   // Preferences states
   const [notifications, setNotifications] = useState<'yes' | 'no'>('no');
@@ -50,6 +52,84 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('Logout error:', error);
       setLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    // Get the current user from the store at the moment of the call
+    const user = useAuthStore.getState().session?.user;
+
+    // Log the user object and user.id for debugging
+    console.log('[handleDeleteAccount] User object from store:', JSON.stringify(user, null, 2));
+    if (user) {
+      console.log('[handleDeleteAccount] User ID:', user.id);
+    } else {
+      console.log('[handleDeleteAccount] User object is null or undefined.');
+    }
+
+    if (user && user.id) {
+      Alert.alert(
+        "Delete my account",
+        "You are about to delete your account. This action is irreversible and can't be undone. All your data will be erased. Are you sure?",
+        [
+          {
+            text: "No",
+            style: "cancel",
+            onPress: () => setIsDeletingAccount(false),
+          },
+          {
+            text: "Yes",
+            style: "destructive",
+            onPress: async () => {
+              setIsDeletingAccount(true);
+              try {
+                // Ensure user.id is being passed in the body
+                console.log(`[handleDeleteAccount] Invoking delete-user-account with userId: ${user.id}`);
+                const { data, error } = await supabase.functions.invoke(
+                  'delete-user-account',
+                  { body: { userId: user.id } } // Pass userId in the body
+                );
+
+                if (error) {
+                  let errorMessage = error.message;
+                  // Attempt to get more specific error message from Supabase function error context
+                  if ((error.context as any)?.error_message) {
+                    errorMessage = (error.context as any).error_message;
+                  } else if (data && (data as any).error) {
+                    errorMessage = (data as any).error;
+                  }
+                  console.error('[handleDeleteAccount] Error from delete-user-account function:', errorMessage);
+                  throw new Error(errorMessage);
+                }
+
+                // Check if the function itself signaled an error in its JSON response
+                if (data && (data as any).error) {
+                   console.error('[handleDeleteAccount] Error in function data response:', (data as any).error);
+                   throw new Error((data as any).error);
+                }
+                
+                console.log('[handleDeleteAccount] Account deletion successful on server-side.');
+                // Force sign out on client side AFTER successful server-side deletion
+                await signOut(); 
+
+                Alert.alert("Account Deleted", "Your account has been successfully deleted.");
+                router.replace('/login'); 
+
+              } catch (error: any) {
+                console.error('[handleDeleteAccount] Catch block error:', error.message);
+                Alert.alert("Error", error.message || "An unexpected error occurred while deleting your account.");
+              } finally {
+                setIsDeletingAccount(false);
+              }
+            }
+          }
+        ],
+        { cancelable: true, onDismiss: () => setIsDeletingAccount(false) }
+      );
+    } else {
+      console.error('[handleDeleteAccount] User or User ID is undefined. Cannot proceed with account deletion.');
+      Alert.alert("Error", "Could not delete account. User information is missing or you are not properly signed in.");
+      setIsDeletingAccount(false); // Reset loading state if any
     }
   };
 
@@ -220,6 +300,19 @@ export default function SettingsScreen() {
           <LogOut size={20} color="#ef4444" />
           <Text style={styles.logoutText}>Log Out</Text>
         </Pressable>
+
+        {/* Delete Account Button */}
+        {isDeletingAccount ? (
+          <ActivityIndicator size="large" color="#ef4444" style={styles.deleteLoader} />
+        ) : (
+          <Pressable 
+            style={styles.deleteAccountButton}
+            onPress={handleDeleteAccount}
+          >
+            <Trash2 size={20} color="#ef4444" />
+            <Text style={styles.deleteAccountButtonText}>Delete My Account</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       {showSuccessMessage && (
@@ -523,4 +616,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
   },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#ef4444',
+    padding: 16,
+    borderRadius: 16,
+    marginHorizontal: 24,
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  deleteAccountButtonText: {
+    color: '#ef4444',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    marginLeft: 8,
+  },
+  deleteLoader: {
+    marginTop: 24,
+    marginBottom: 32,
+  }
 });

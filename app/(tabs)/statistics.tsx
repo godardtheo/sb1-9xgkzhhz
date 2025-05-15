@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollViewContent: {
-    paddingBottom: 100, // Add padding to prevent overlap with bottom navigation
+    paddingBottom: 100,
   },
   header: {
     padding: 24,

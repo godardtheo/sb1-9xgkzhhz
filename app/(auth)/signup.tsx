@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, Platform, Keyboard, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, Platform, Keyboard, ViewStyle, TextStyle, Linking } from 'react-native';
 import { useRouter, Link, useSegments } from 'expo-router';
 import { useAuthStore } from '@/lib/auth/store';
 import { Mail, Lock, ArrowRight } from 'lucide-react-native';
+import { Checkbox } from '@/components/Checkbox';
 
 export default function SignupScreen() {
   const router = useRouter();
   const segments = useSegments();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [privacyConsent, setPrivacyConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const { signUp, loading, session, userProfile, isAppResuming, pendingModalPath: authStorePendingModalPath } = useAuthStore();
@@ -51,6 +53,11 @@ export default function SignupScreen() {
       
       if (!password || password.length < 6) {
         setError('Password must be at least 6 characters');
+        return;
+      }
+
+      if (!privacyConsent) {
+        setError('You must agree to the privacy policy to create an account.');
         return;
       }
       
@@ -100,14 +107,35 @@ export default function SignupScreen() {
             />
           </View>
 
+          {/* Privacy Consent Checkbox and Text */}
+          <View style={styles.consentContainer}>
+            <Checkbox
+              checked={privacyConsent}
+              onChange={setPrivacyConsent}
+              size={20}
+            />
+            <View style={styles.consentTextContainer}>
+              <Text style={styles.consentText}>
+                I consent to SetLog collecting and processing my personal data. To learn more, you can consult our {' '}
+                <Text 
+                  style={styles.privacyLink}
+                  onPress={() => Linking.openURL('https://opalescent-saxophone-7ec.notion.site/SetLog-Privacy-1f3c65959bb980b889fae00622a37fde?pvs=4')}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            </View>
+          </View>
+
           {error && (
             <Text style={styles.errorText}>{error}</Text>
           )}
 
           <Pressable 
-            style={styles.button}
+            style={[styles.button, (loading || !email.trim() || !password || !privacyConsent) && styles.buttonDisabled]}
             onPress={handleSignup}
-            disabled={loading}
+            disabled={loading || !email.trim() || !password || !privacyConsent}
           >
             {loading ? (
               <ActivityIndicator color="#021a19" />
@@ -149,6 +177,11 @@ const styles = StyleSheet.create<{
   footer: ViewStyle;
   footerText: TextStyle;
   footerLink: TextStyle;
+  consentContainer: ViewStyle;
+  consentTextContainer: ViewStyle;
+  consentText: TextStyle;
+  privacyLink: TextStyle;
+  buttonDisabled: ViewStyle;
 }>({
   container: {
     flex: 1,
@@ -203,6 +236,10 @@ const styles = StyleSheet.create<{
     justifyContent: 'center',
     gap: 8,
   },
+  buttonDisabled: {
+    backgroundColor: '#115e59',
+    opacity: 0.7,
+  },
   buttonText: {
     color: '#021a19',
     fontSize: 16,
@@ -229,6 +266,27 @@ const styles = StyleSheet.create<{
   footerLink: {
     color: '#14b8a6',
     fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  consentContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  consentTextContainer: {
+    flex: 1,
+  },
+  consentText: {
+    color: '#ccfbf1',
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    lineHeight: 20,
+  },
+  privacyLink: {
+    color: '#14b8a6',
+    textDecorationLine: 'underline',
     fontFamily: 'Inter-SemiBold',
   },
 });

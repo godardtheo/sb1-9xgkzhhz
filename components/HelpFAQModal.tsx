@@ -70,7 +70,7 @@ export default function HelpFAQModal({ visible, onClose }: HelpFAQModalProps) {
         <Text style={styles.contactText}>
           If you have any questions or need assistance, please contact us at:
         </Text>
-        <Text style={styles.contactEmail}>contact@setlog.com</Text>
+        <Text style={styles.contactEmail}>godardtheopro@gmail.com</Text>
       </View>
     </InfoModal>
   );
