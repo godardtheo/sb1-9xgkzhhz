@@ -166,9 +166,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
           return;
         }
 
+        // The supabase client instance is already configured with the correct schema (public or production).
+        // We can directly query from('users') and it will use the configured schema.
         const { data: profile, error: profileError } = await supabase
-            .schema('public')
-            .from('users')
+            .from('users') // No need to call .schema() here, it uses the one from initialization
             .select('*')
             .eq('id', userAuth.user.id)
             .single();
@@ -253,9 +254,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
     signUp: async (email: string, password: string): Promise<void> => {
       set({ loading: true, error: null });
       try {
+        const targetSchema = process.env.EXPO_PUBLIC_ENV === 'production' ? 'production' : 'public';
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              target_schema: targetSchema
+            }
+          }
         });
         
         if (error) throw error;

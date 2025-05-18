@@ -519,9 +519,13 @@ export default function LiveWorkoutScreen() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      console.log('[FINISH WORKOUT - PROD LOG] User ID being sent to create_workout:', user.id);
+      console.log('[FINISH WORKOUT - PROD LOG] Workout Name:', workoutName);
+      console.log('[FINISH WORKOUT - PROD LOG] Display Duration:', displayDuration);
+
       // Step 1: Create the workout
       const { data: workoutId, error: workoutError } = await supabase.rpc(
-        'create_workout',
+        'create_workout', // Reverted: no explicit schema
         {
           p_user_id: user.id,
           p_name: workoutName,
@@ -532,6 +536,10 @@ export default function LiveWorkoutScreen() {
       );
 
       if (workoutError) throw workoutError;
+      if (!workoutId || typeof workoutId !== 'string') { 
+        console.error("Failed to create workout or extract ID. Raw data from 'create_workout' RPC:", workoutId);
+        throw new Error('Failed to create workout or get valid ID.');
+      }
 
       // Step 2: Process each exercise
       for (const [index, exercise] of exercises.entries()) {
@@ -541,16 +549,21 @@ export default function LiveWorkoutScreen() {
         if (completedSets.length > 0) {
           // Create workout exercise
           const { data: workoutExerciseId, error: exerciseError } = await supabase.rpc(
-            'create_workout_exercise',
+            'create_workout_exercise', // Reverted: no explicit schema
             {
-              parent_workout_id: workoutId,
-              exercise_id: exercise.id,
-              sets: completedSets.length,
-              exercise_order: index
+              p_parent_workout_id: workoutId,
+              p_exercise_id: exercise.id,
+              p_sets: completedSets.length,
+              p_exercise_order: index 
             }
           );
 
           if (exerciseError) throw exerciseError;
+          if (!workoutExerciseId || typeof workoutExerciseId !== 'string') { 
+            console.error("[PROD DEBUG] create_workout_exercise RPC returned invalid ID:", workoutExerciseId, "Type:", typeof workoutExerciseId);
+            throw new Error('Failed to create workout exercise or get valid ID.');
+          }
+          console.log("[PROD DEBUG] workoutExerciseId being passed to create_workout_sets:", workoutExerciseId);
 
           // Step 3: Save the sets
           const setsData = completedSets.map((set, setIndex) => ({
@@ -560,7 +573,7 @@ export default function LiveWorkoutScreen() {
           }));
 
           const { data: setsResult, error: setsError } = await supabase.rpc(
-            'create_workout_sets',
+            'create_workout_sets', // Reverted: no explicit schema
             {
               p_workout_exercise_id: workoutExerciseId,
               p_sets: setsData
