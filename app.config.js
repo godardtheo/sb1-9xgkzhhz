@@ -16,6 +16,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.godapps.setlog",
+      buildNumber: "2",
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false
       }
@@ -25,7 +26,8 @@ module.exports = {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#021a19"
       },
-      package: "com.godapps.setlog"
+      package: "com.godapps.setlog",
+      versionCode: 2
     },
     web: {
       bundler: "metro",
