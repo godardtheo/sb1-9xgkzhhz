@@ -23,7 +23,7 @@ export default function NonDraggableDoneExercise({ exercise, exerciseId, onPress
   return (
     <Pressable 
       style={styles.container}
-      onPress={() => onPress(exerciseId)}
+      onPress={() => { /* Ne fait plus rien au clic */ }}
     >
       {/* Exercise Header */}
       <View style={styles.header}>
