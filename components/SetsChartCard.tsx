@@ -127,11 +127,15 @@ export default function SetsChartCard({ period }: SetsChartCardProps) {
           };
         });
         
-        console.log("Workouts with sets:", workoutsWithSetCounts);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.log("Workouts with sets:", workoutsWithSetCounts);
+        }
         
         setWorkoutsWithSets(workoutsWithSetCounts);
       } catch (err: any) {
-        console.error('Error fetching workouts and sets:', err);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.error('Error fetching workouts and sets:', err);
+        }
         setError(err.message);
       } finally {
         setLoading(false);

@@ -519,9 +519,11 @@ export default function LiveWorkoutScreen() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      console.log('[FINISH WORKOUT - PROD LOG] User ID being sent to create_workout:', user.id);
-      console.log('[FINISH WORKOUT - PROD LOG] Workout Name:', workoutName);
-      console.log('[FINISH WORKOUT - PROD LOG] Display Duration:', displayDuration);
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.log('[FINISH WORKOUT - PROD LOG] User ID being sent to create_workout:', user.id);
+        console.log('[FINISH WORKOUT - PROD LOG] Workout Name:', workoutName);
+        console.log('[FINISH WORKOUT - PROD LOG] Display Duration:', displayDuration);
+      }
 
       // Step 1: Create the workout
       const { data: workoutId, error: workoutError } = await supabase.rpc(
@@ -537,7 +539,9 @@ export default function LiveWorkoutScreen() {
 
       if (workoutError) throw workoutError;
       if (!workoutId || typeof workoutId !== 'string') { 
-        console.error("Failed to create workout or extract ID. Raw data from 'create_workout' RPC:", workoutId);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.error("Failed to create workout or extract ID. Raw data from 'create_workout' RPC:", workoutId);
+        }
         throw new Error('Failed to create workout or get valid ID.');
       }
 
@@ -560,10 +564,14 @@ export default function LiveWorkoutScreen() {
 
           if (exerciseError) throw exerciseError;
           if (!workoutExerciseId || typeof workoutExerciseId !== 'string') { 
-            console.error("[PROD DEBUG] create_workout_exercise RPC returned invalid ID:", workoutExerciseId, "Type:", typeof workoutExerciseId);
+            if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+              console.error("[PROD DEBUG] create_workout_exercise RPC returned invalid ID:", workoutExerciseId, "Type:", typeof workoutExerciseId);
+            }
             throw new Error('Failed to create workout exercise or get valid ID.');
           }
-          console.log("[PROD DEBUG] workoutExerciseId being passed to create_workout_sets:", workoutExerciseId);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.log("[PROD DEBUG] workoutExerciseId being passed to create_workout_sets:", workoutExerciseId);
+          }
 
           // Step 3: Save the sets
           const setsData = completedSets.map((set, setIndex) => ({

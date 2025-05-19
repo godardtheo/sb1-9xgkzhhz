@@ -52,7 +52,9 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
           .single();
 
         if (userError) {
-          console.error('Error fetching user weight unit:', userError);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.error('Error fetching user weight unit:', userError);
+          }
           // Continue with default kg if there's an error
         } else if (userData) {
           setWeightUnit(userData.weight_unit || 'kg');
@@ -100,6 +102,9 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
         const { data: workoutsData, error: workoutsError } = await workoutsQuery;
         
         if (workoutsError) {
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.error('Error fetching workouts and weight lifted:', workoutsError);
+          }
           throw workoutsError;
         }
         
@@ -119,7 +124,9 @@ export default function WeightLiftedChartCard({ period }: WeightLiftedChartCardP
         
         setWorkoutsWithWeight(workoutsWithWeightData);
       } catch (err: any) {
-        console.error('Error fetching workouts and weight lifted:', err);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.error('Error fetching workouts and weight lifted:', err);
+        }
         setError(err.message);
       } finally {
         setLoading(false);

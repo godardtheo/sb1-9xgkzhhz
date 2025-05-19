@@ -50,7 +50,9 @@ export default function SettingsScreen() {
         router.replace('/login');
       }, 1500);
     } catch (error) {
-      console.error('Logout error:', error);
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.error('Logout error:', error);
+      }
       setLoading(false);
     }
   };
@@ -59,12 +61,18 @@ export default function SettingsScreen() {
     // Get the current user from the store at the moment of the call
     const user = useAuthStore.getState().session?.user;
 
-    // Log the user object and user.id for debugging
-    console.log('[handleDeleteAccount] User object from store:', JSON.stringify(user, null, 2));
+    // Log le user object et user.id pour debug
+    if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+      console.log('[handleDeleteAccount] User object from store:', JSON.stringify(user, null, 2));
+    }
     if (user) {
-      console.log('[handleDeleteAccount] User ID:', user.id);
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.log('[handleDeleteAccount] User ID:', user.id);
+      }
     } else {
-      console.log('[handleDeleteAccount] User object is null or undefined.');
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.log('[handleDeleteAccount] User object is null or undefined.');
+      }
     }
 
     if (user && user.id) {
@@ -84,7 +92,9 @@ export default function SettingsScreen() {
               setIsDeletingAccount(true);
               try {
                 // Ensure user.id is being passed in the body
-                console.log(`[handleDeleteAccount] Invoking delete-user-account with userId: ${user.id}`);
+                if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                  console.log(`[handleDeleteAccount] Invoking delete-user-account with userId: ${user.id}`);
+                }
                 const { data, error } = await supabase.functions.invoke(
                   'delete-user-account',
                   { body: { userId: user.id } } // Pass userId in the body
@@ -98,17 +108,23 @@ export default function SettingsScreen() {
                   } else if (data && (data as any).error) {
                     errorMessage = (data as any).error;
                   }
-                  console.error('[handleDeleteAccount] Error from delete-user-account function:', errorMessage);
+                  if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                    console.error('[handleDeleteAccount] Error from delete-user-account function:', errorMessage);
+                  }
                   throw new Error(errorMessage);
                 }
 
                 // Check if the function itself signaled an error in its JSON response
                 if (data && (data as any).error) {
-                   console.error('[handleDeleteAccount] Error in function data response:', (data as any).error);
-                   throw new Error((data as any).error);
+                  if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                    console.error('[handleDeleteAccount] Error in function data response:', (data as any).error);
+                  }
+                  throw new Error((data as any).error);
                 }
                 
-                console.log('[handleDeleteAccount] Account deletion successful on server-side.');
+                if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                  console.log('[handleDeleteAccount] Account deletion successful on server-side.');
+                }
                 // Force sign out on client side AFTER successful server-side deletion
                 await signOut(); 
 
@@ -116,7 +132,9 @@ export default function SettingsScreen() {
                 router.replace('/login'); 
 
               } catch (error: any) {
-                console.error('[handleDeleteAccount] Catch block error:', error.message);
+                if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+                  console.error('[handleDeleteAccount] Catch block error:', error.message);
+                }
                 Alert.alert("Error", error.message || "An unexpected error occurred while deleting your account.");
               } finally {
                 setIsDeletingAccount(false);
@@ -127,7 +145,9 @@ export default function SettingsScreen() {
         { cancelable: true, onDismiss: () => setIsDeletingAccount(false) }
       );
     } else {
-      console.error('[handleDeleteAccount] User or User ID is undefined. Cannot proceed with account deletion.');
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.error('[handleDeleteAccount] User or User ID is undefined. Cannot proceed with account deletion.');
+      }
       Alert.alert("Error", "Could not delete account. User information is missing or you are not properly signed in.");
       setIsDeletingAccount(false); // Reset loading state if any
     }

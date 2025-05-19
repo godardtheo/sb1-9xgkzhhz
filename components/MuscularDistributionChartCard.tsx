@@ -264,7 +264,9 @@ export default function MuscularDistributionChartCard({ period }: MuscularDistri
 
         setMuscleData(sortedMuscleData);
       } catch (err: any) {
-        console.error('Error fetching muscle distribution data:', err);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.error('Error fetching muscle distribution data:', err);
+        }
         setError(err.message);
       } finally {
         setLoading(false);

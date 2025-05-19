@@ -29,7 +29,9 @@ const durationToMinutes = (duration: string | number | null): number => {
   // Parse string formats
   if (typeof duration === 'string') {
     // Debug the actual format we're receiving
-    console.log("Duration value from DB:", duration);
+    if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+      console.log("Duration value from DB:", duration);
+    }
     
     // Handle PostgreSQL interval format (e.g. "01:30:00" for 1h30m)
     if (duration.includes(':')) {
@@ -145,15 +147,21 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
         }
         
         // Debug the actual data received
-        console.log("Raw workouts data:", data);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.log("Raw workouts data:", data);
+        }
         if (data && data.length > 0) {
-          console.log("First workout duration type:", typeof data[0].duration);
-          console.log("First workout duration value:", data[0].duration);
+          if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+            console.log("First workout duration type:", typeof data[0].duration);
+            console.log("First workout duration value:", data[0].duration);
+          }
         }
         
         setWorkouts(data || []);
       } catch (err: any) {
-        console.error('Error fetching workouts:', err);
+        if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+          console.error('Error fetching workouts:', err);
+        }
         setError(err.message);
       } finally {
         setLoading(false);
@@ -165,10 +173,14 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
 
   // Transform workouts data for the bar chart
   const chartData: BarChartDataPoint[] = useMemo(() => {
-    console.log("Recalculating chartData...");
+    if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+      console.log("Recalculating chartData...");
+    }
     return workouts.map(workout => {
       const durationMinutes = durationToMinutes(workout.duration);
-      console.log(`Workout ${workout.id} duration: ${workout.duration} → ${durationMinutes} minutes`);
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.log(`Workout ${workout.id} duration: ${workout.duration} → ${durationMinutes} minutes`);
+      }
       return {
         date: workout.date,
         value: durationMinutes,
@@ -261,9 +273,13 @@ export default function WorkoutsDurationChartCard({ period }: WorkoutsDurationCh
     }
     
     // Add Scale Debug log here (comparing against aggregated max)
-    console.log(`[Scale Debug - WorkoutDuration] Calculated maxDurationValue (used as adjustedMax): ${maxTickValue}, Actual Max AGGREGATED Value in Data: ${maxAggregatedDuration}`);
+    if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+      console.log(`[Scale Debug - WorkoutDuration] Calculated maxDurationValue (used as adjustedMax): ${maxTickValue}, Actual Max AGGREGATED Value in Data: ${maxAggregatedDuration}`);
+    }
     if (maxTickValue < maxAggregatedDuration) {
-      console.error(`[Scale Debug - WorkoutDuration] ERROR: maxDurationValue (${maxTickValue}) is LESS THAN actual max AGGREGATED value (${maxAggregatedDuration})!`);
+      if (process.env.EXPO_PUBLIC_ENV !== 'production') {
+        console.error(`[Scale Debug - WorkoutDuration] ERROR: maxDurationValue (${maxTickValue}) is LESS THAN actual max AGGREGATED value (${maxAggregatedDuration})!`);
+      }
     }
 
     return { yAxisTicks: ticks, maxDurationValue: maxTickValue };
