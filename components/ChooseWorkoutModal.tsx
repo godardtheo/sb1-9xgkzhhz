@@ -379,8 +379,8 @@ export default function ChooseWorkoutModal({ visible, onClose }: Props) {
         <Pressable style={styles.backdrop as any} onPress={onClose} />
         <Animated.View 
           style={styles.modalContainer as any}
-          entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.springify().damping(15)}
+          // entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
+          // exiting={SlideOutDown.springify().damping(15)}
         >
           <View style={styles.modalContent as any}>
             {showWorkoutsList ? renderWorkoutsList() : renderMainOptions()}

@@ -27,8 +27,8 @@ export default function LogoutConfirmationModal({
   const renderContent = () => (
     <Animated.View 
       style={styles.modalContainer}
-      entering={SlideInDown.springify().damping(15)}
-      exiting={SlideOutDown.springify().damping(15)}
+      // entering={SlideInDown.springify().damping(15)}
+      // exiting={SlideOutDown.springify().damping(15)}
     >
       <View style={styles.modalContent}>
         <View style={styles.header}>

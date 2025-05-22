@@ -93,8 +93,8 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
         <Pressable style={styles.backdrop} onPress={onClose} />
         <Animated.View 
           style={styles.modalContainer as ViewStyle}
-          entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
-          exiting={SlideOutDown.springify().damping(15)}
+          // entering={Platform.OS === 'android' ? undefined : SlideInDown.springify().damping(15)}
+          // exiting={SlideOutDown.springify().damping(15)}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <View style={styles.modalContent as ViewStyle}>
@@ -167,7 +167,7 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                       {showGenderDropdown && (
                         <Animated.View 
                           style={[styles.dropdown].filter(Boolean) as StyleProp<ViewStyle>}
-                          entering={Platform.OS === 'android' ? undefined : FadeIn.duration(200)}
+                          // entering={Platform.OS === 'android' ? undefined : FadeIn.duration(200)}
                           layout={Layout.springify()}
                         >
                           {GENDER_OPTIONS.map((option) => (
@@ -203,7 +203,7 @@ export default function EditProfileModal({ visible, onClose, userData, onUpdate 
                 {success && (
                   <Animated.View 
                     style={styles.successMessage as ViewStyle}
-                    entering={FadeIn.duration(200)}
+                    // entering={FadeIn.duration(200)}
                   >
                     <Text style={styles.successText as TextStyle}>Profile updated successfully!</Text>
                   </Animated.View>

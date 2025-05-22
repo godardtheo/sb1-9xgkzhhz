@@ -453,9 +453,10 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="modals"
-          options={{ 
+          options={{
             animation: 'slide_from_bottom',
-            presentation: 'modal',
+            // Condition pour la présentation
+            presentation: Platform.OS === 'ios' && Platform.isPad ? 'fullScreenModal' : 'modal',
             headerShown: false,
             contentStyle: { backgroundColor: '#021a19' },
           }}
